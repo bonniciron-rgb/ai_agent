@@ -29,33 +29,39 @@ API. The user retains the authorisation gate on every order.
 
 ## 4. Architecture
 
+Three managed services, no always-on box:
+
 ```
-┌──────────────────────────────────────────────────────┐
-│  Data ingestion (cron: daily 06:30 UTC)              │
-│  yfinance · Finnhub free · EDGAR · FRED · news feed  │
-└──────────────────┬───────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────┐
+│  GitHub Actions — daily cron 06:30 UTC + intraday poll 5-15min │
+│  · ingest data (yfinance · Finnhub · EDGAR · FRED · news)      │
+│  · run feature pipeline (pandas-ta indicators)                 │
+│  · invoke Claude agent → proposals                             │
+│  · push digest to Telegram                                     │
+└──────────────────┬─────────────────────────────────────────────┘
+                   │ writes / reads
                    ▼
-            ┌──────────────┐
-            │ SQLite DB    │  bars · fundamentals · news · proposals · orders
-            └──────┬───────┘
+            ┌──────────────────┐
+            │ Neon Postgres    │  bars · proposals · orders · audit log
+            └──────────────────┘
+                   ▲
+                   │ reads / writes
+┌──────────────────┴─────────────────────────────────────────────┐
+│  Vercel serverless functions                                   │
+│  · POST /telegram/webhook  ← Telegram approval taps            │
+│  · POST /t212/proxy        ← signed exec relay (phase 2 only)  │
+│  · GET  /healthz                                               │
+└──────────────────┬─────────────────────────────────────────────┘
+                   │ on approve
                    ▼
-       ┌────────────────────────┐
-       │ Feature pipeline       │  pandas-ta indicators · regime tag · ATR
-       └───────────┬────────────┘
-                   ▼
-       ┌────────────────────────┐
-       │ Claude agent (tool use)│  reads portfolio + features + news
-       │ → ranked proposals     │  buy/sell, limit, stop, size, rationale
-       └───────────┬────────────┘
-                   ▼
-       ┌────────────────────────┐
-       │ Telegram bot           │  inline buttons: Approve · Edit · Reject
-       └───────────┬────────────┘
-                   ▼ (on approve)
-       ┌────────────────────────┐
-       │ T212 order placement   │  limit / stop_limit orders
-       └────────────────────────┘
+            ┌──────────────────┐
+            │ Trading 212 API  │  limit / stop_limit orders
+            └──────────────────┘
 ```
+
+State is in Neon (Postgres). Each GitHub Actions run is stateless and
+short-lived. Vercel functions are stateless. Nothing is "always on" except
+the managed DB.
 
 ## 5. Components
 
@@ -67,10 +73,13 @@ API. The user retains the authorisation gate on every order.
 | Indicators | `pandas-ta` | Avoid TA-Lib's C dependency |
 | Backtest | `vectorbt` | Fast, vectorised, good portfolio support |
 | Agent | `anthropic` SDK, Claude Sonnet 4.6 | Tool-use for portfolio/quote/news lookup |
-| Bot | `python-telegram-bot` v21+ | Webhook mode |
-| Scheduler | `APScheduler` | In-process cron for the daily loop |
-| Storage | SQLite via `sqlmodel` | One file, easy backup |
-| Deploy | Single VPS or local container | No HA needed in V1 |
+| Bot | `python-telegram-bot` v21+ on Vercel functions | Webhook mode (Vercel-hosted endpoint) |
+| Scheduler | GitHub Actions cron | No always-on host needed |
+| Storage | Postgres via `sqlmodel` (async) on **Neon free tier** | 512MB; well within V1 budget |
+| Compute (cron) | GitHub Actions runners | ~1500 min/month projected use; under free 2000 limit |
+| Compute (webhooks) | Vercel serverless functions (Python runtime) | scales to zero |
+| Secrets | GitHub Actions secrets · Vercel env vars · Neon connection string | encrypted at rest |
+| Cost | **£0/month at V1 volume** | upgrade triggers in §15 |
 
 ## 6. Data sources (all free tier)
 
@@ -146,21 +155,43 @@ Three layers, fed to Claude as numeric context — none are auto-traded:
 
 | # | Deliverable | Acceptance |
 |---|---|---|
-| M0 | Repo scaffold, config, data adapters | yfinance, Finnhub, EDGAR, FRED working |
+| M0 | Repo scaffold, config, data adapters | yfinance, Finnhub, EDGAR, FRED working; CI lint+test green |
 | M1 | Feature pipeline + watchlist load | Indicators computed for full watchlist on demand |
 | M2 | Backtest harness w/ deterministic strategy | Equity curve produced for SMA-cross baseline |
 | M3 | Claude agent integration | Proposals generated for backtest dates |
 | M4 | Backtest with LLM proposals | Reports vs SPY benchmark |
 | M5 | T212 paper integration | Read portfolio, place demo orders |
-| M6 | Telegram bot + approval flow | End-to-end demo on paper account |
+| M6 | Telegram bot + approval flow on Vercel | End-to-end demo on paper account |
 | M7 | Risk rails + kill switch | All limits enforced, /halt works |
+| M7.5 | GitHub Actions cron + Neon DB wiring | Daily run executes end-to-end on schedule |
 | M8 | One-week paper run | Daily digests, approvals, fills logged |
 | M9 | Go-live decision point | User reviews paper results, decides on live |
 
-## 13. Open questions
+## 13. Decisions (resolved)
 
-- T212 account type (cash / ISA / invest)? Affects tax-loss rules.
-- Telegram chat: 1:1 with bot, or a private channel?
-- LLM cost ceiling per day?
-- Where does this run — local machine, VPS, container?
-- Secrets management approach (env file, 1Password, etc.)?
+| # | Decision |
+|---|---|
+| Account type | **T212 ISA** (Invest as fallback if annual allowance is exhausted; tax-aware sell rail in §9 covers both) |
+| Telegram surface | **Private group containing user + bot** (upgradeable to multi-approver later) |
+| LLM cost cap | **$3/day hard cap, $2/day alert.** Tracked in DB, refuses calls on breach, posts Telegram alert |
+| Hosting | **GitHub Actions (cron) + Vercel (webhooks) + Neon Postgres (state).** £0/month at V1 volume |
+| Secrets | **GitHub Actions secrets + Vercel env vars** for runtime keys; T212 key kept short-rotation, no host IP allowlist available on this stack |
+
+## 14. Stack-specific risks & mitigations
+
+| Risk | Mitigation |
+|---|---|
+| GitHub Actions cron is best-effort (5–30 min drift possible) | T212 enforces stops broker-side via `stop_limit` orders; agent only reports detection. Drift is cosmetic, not financial |
+| Free GitHub Actions minutes (2000/mo) | Projected ~1500/mo with daily run + 12 intraday polls; alert at 1800/mo. Upgrade to Pro ($4/mo) if breached |
+| No static-IP for T212 API allowlisting | Rotate T212 key quarterly; T212 MFA + withdrawal protections still apply. Phase-2 option: small static-IP relay (Cloudflare Worker or £4 VPS) |
+| Vercel cold starts (~300ms) on Telegram approval | Acceptable — humans tap buttons in seconds, not milliseconds |
+| Neon free-tier compute hours (191/month) | Connections short-lived from cron; well under budget. Alert at 150h/month |
+| Secrets sprawl across 3 services | Documented in `docs/runbook.md` (M0). Quarterly rotation checklist |
+
+## 15. Upgrade triggers
+
+- Backtest shows edge → flip to T212 live (V1.1)
+- GitHub Actions minutes exceeded → GitHub Pro ($4/mo) or move cron to Pi/VPS
+- Need intraday bars or higher-frequency news → Polygon or Tiingo (£25–£40/mo)
+- Need static-IP for T212 allowlist → small relay box
+- Multi-user / multi-portfolio → real auth layer + per-user state in Neon
