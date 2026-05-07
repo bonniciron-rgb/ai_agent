@@ -78,7 +78,7 @@ class BotHandlers:
             await query.edit_message_text(msg)
 
     async def handle_halt(self, update: object, context: object) -> None:
-        """/halt command — sets a halt flag that the daily loop checks."""
+        """/halt — set the DB-backed halt flag.  The daily cron checks it before each run."""
         try:
             from telegram import Update
         except ImportError:
@@ -87,11 +87,50 @@ class BotHandlers:
         if not isinstance(update, Update) or update.message is None:
             return
 
-        self._store.record_decision(-1, "halt", "system")
-        await update.message.reply_text("🛑 Trading halted. Use /resume to restart.")
+        try:
+            from ai_agent.db.settings_store import set_trading_halted
+
+            user = update.message.from_user
+            decided_by = (
+                f"@{user.username}"
+                if user and user.username
+                else str(user.id if user else "system")
+            )
+            set_trading_halted(True, updated_by=decided_by)
+            await update.message.reply_text(
+                "🛑 Trading halted. Use /resume to restart.",
+            )
+        except Exception as exc:
+            logger.exception("Failed to set halt flag")
+            await update.message.reply_text(f"⚠️ Could not halt: {exc}")
+
+    async def handle_resume(self, update: object, context: object) -> None:
+        """/resume — clear the halt flag so the next cron run will execute."""
+        try:
+            from telegram import Update
+        except ImportError:
+            return
+
+        if not isinstance(update, Update) or update.message is None:
+            return
+
+        try:
+            from ai_agent.db.settings_store import set_trading_halted
+
+            user = update.message.from_user
+            decided_by = (
+                f"@{user.username}"
+                if user and user.username
+                else str(user.id if user else "system")
+            )
+            set_trading_halted(False, updated_by=decided_by)
+            await update.message.reply_text("✅ Trading resumed. Next cron run will execute.")
+        except Exception as exc:
+            logger.exception("Failed to clear halt flag")
+            await update.message.reply_text(f"⚠️ Could not resume: {exc}")
 
     async def handle_status(self, update: object, context: object) -> None:
-        """/status command — replies with pending proposal count."""
+        """/status — show halt state and pending proposal count."""
         try:
             from telegram import Update
         except ImportError:
@@ -100,7 +139,14 @@ class BotHandlers:
         if not isinstance(update, Update) or update.message is None:
             return
 
-        await update.message.reply_text("(i) Status: agent running normally.")
+        try:
+            from ai_agent.db.settings_store import is_trading_halted
+
+            halted = is_trading_halted()
+            state = "🛑 HALTED" if halted else "✅ running"
+            await update.message.reply_text(f"Status: {state}")
+        except Exception as exc:
+            await update.message.reply_text(f"Status check failed: {exc}")
 
     async def handle_config(self, update: object, context: object) -> None:
         """/config show — display active external-signals configuration."""
