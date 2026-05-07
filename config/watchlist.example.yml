@@ -1,0 +1,51 @@
+# Curated candidate watchlist. Copy to config/watchlist.yml and edit.
+# ~30 names is the V1 sweet spot. Holdings are auto-added at runtime.
+
+entries:
+  # Mega-cap tech
+  - symbol: AAPL
+    sector: technology
+  - symbol: MSFT
+    sector: technology
+  - symbol: GOOGL
+    sector: communication_services
+  - symbol: AMZN
+    sector: consumer_discretionary
+  - symbol: NVDA
+    sector: technology
+    tags: [ai]
+  - symbol: META
+    sector: communication_services
+
+  # Mega-cap consumer
+  - symbol: COST
+    sector: consumer_staples
+  - symbol: WMT
+    sector: consumer_staples
+
+  # Healthcare
+  - symbol: UNH
+    sector: healthcare
+  - symbol: LLY
+    sector: healthcare
+    tags: [glp1]
+
+  # Industrials & energy
+  - symbol: CAT
+    sector: industrials
+  - symbol: XOM
+    sector: energy
+
+  # Financials
+  - symbol: JPM
+    sector: financials
+  - symbol: V
+    sector: financials
+
+  # Benchmarks (kept for reference, not traded)
+  - symbol: SPY
+    sector: index
+    tags: [benchmark]
+  - symbol: QQQ
+    sector: index
+    tags: [benchmark]
