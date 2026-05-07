@@ -39,8 +39,11 @@ agent = [
 bot = [
     "python-telegram-bot[webhooks]>=21.6",
 ]
+signals = [
+    "telethon>=1.36",
+]
 production = [
-    "ai_agent[data,features,agent,bot]",
+    "ai_agent[data,features,agent,bot,signals]",
 ]
 broker = [
     "httpx>=0.27",

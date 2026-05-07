@@ -32,6 +32,12 @@ class Settings(BaseSettings):
     telegram_bot_token: SecretStr = Field(default=SecretStr(""))
     telegram_chat_id: str = ""
 
+    # Telegram MTProto credentials for reading external signal channels.
+    # Obtain from https://my.telegram.org; session string from scripts/auth_telegram.py
+    telegram_api_id: int | None = None
+    telegram_api_hash: SecretStr = Field(default=SecretStr(""))
+    telegram_session_string: SecretStr = Field(default=SecretStr(""))
+
     finnhub_api_key: SecretStr = Field(default=SecretStr(""))
     fred_api_key: SecretStr = Field(default=SecretStr(""))
     newsapi_key: SecretStr = Field(default=SecretStr(""))

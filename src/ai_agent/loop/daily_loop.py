@@ -95,11 +95,36 @@ def _build_toolbox(t212_client, portfolio_snapshot: LivePortfolioSnapshot) -> To
             confidence=inputs["confidence"],
         )
 
+    def get_external_signals(inputs: dict) -> list[dict]:
+        from ai_agent.external_signals.store import get_signals_for_symbol
+
+        symbol = inputs["symbol"]
+        days_back = int(inputs.get("days_back", 7))
+        try:
+            rows = get_signals_for_symbol(symbol, days_back=days_back)
+            return [
+                {
+                    "channel": r.channel,
+                    "posted_at": r.posted_at.isoformat(),
+                    "side": r.side,
+                    "entry_price": float(r.entry_price) if r.entry_price else None,
+                    "stop_price": float(r.stop_price) if r.stop_price else None,
+                    "target_price": float(r.target_price) if r.target_price else None,
+                    "conviction": r.conviction,
+                    "notes": r.notes,
+                }
+                for r in rows
+            ]
+        except Exception as exc:
+            logger.warning("get_external_signals failed for %s: %s", symbol, exc)
+            return []
+
     return Toolbox(
         get_features=get_features,
         get_news=get_news,
         get_portfolio=get_portfolio,
         propose_trade=propose_trade,
+        get_external_signals=get_external_signals,
     )
 
 

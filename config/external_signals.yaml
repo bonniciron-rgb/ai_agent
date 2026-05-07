@@ -1,0 +1,17 @@
+channels:
+  - "@JdubTrades_Telegram"
+
+# How often signals are ingested. Controls the cron schedule in signals_ingest.yml.
+#   daily   — once at 06:25 UTC Mon-Fri (default)
+#   hourly  — every hour Mon-Fri (edit the cron expression in the workflow too)
+cadence: daily
+
+# Signals older than this (in trading days) are ignored by the agent tool.
+freshness_days: 7
+
+# How many days of history to backfill on the very first run.
+backfill_days: 30
+
+# Claude model used to parse raw channel text into structured signals.
+# Haiku is fast and cheap; change to claude-sonnet-4-6 for higher accuracy.
+parser_model: claude-haiku-4-5-20251001
