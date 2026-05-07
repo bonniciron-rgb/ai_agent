@@ -50,6 +50,7 @@ dev = [
     "mypy>=1.11",
     "types-PyYAML",
     "types-python-dateutil",
+    "pandas>=2.2",
 ]
 
 [build-system]

@@ -21,10 +21,10 @@ secrets/
 *.key
 
 # Local data & state
-data/
+/data/
 *.sqlite
 *.db
-logs/
+/logs/
 *.log
 
 # OS / editors
