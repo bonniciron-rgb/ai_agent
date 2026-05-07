@@ -27,7 +27,7 @@ class YFinanceSource:
     def __init__(self, *, auto_adjust: bool = False) -> None:
         self.auto_adjust = auto_adjust
 
-    def _download(self, symbol: str, start: date, end: date) -> "pd.DataFrame":
+    def _download(self, symbol: str, start: date, end: date) -> pd.DataFrame:
         try:
             import yfinance as yf
         except ImportError as e:  # pragma: no cover
@@ -78,9 +78,7 @@ def _frame_to_series(symbol: str, df: Any, source: str) -> BarSeries:
     lows = _col("Low")
     closes = _col("Close")
     adj_closes = (
-        _col("Adj Close")
-        if ("Adj Close" in cols or _has_multilevel(cols, "Adj Close"))
-        else None
+        _col("Adj Close") if ("Adj Close" in cols or _has_multilevel(cols, "Adj Close")) else None
     )
     volumes = _col("Volume")
 
