@@ -110,3 +110,30 @@ class LlmUsage(SQLModel, table=True):
     cost_usd: Decimal
     purpose: str = Field(max_length=64)
     created_at: datetime = Field(default_factory=_utcnow)
+
+
+class ExternalMessage(SQLModel, table=True):
+    __table_args__ = (UniqueConstraint("channel", "message_id", name="uq_ext_msg_channel_id"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    channel: str = Field(index=True, max_length=64)
+    message_id: int = Field(index=True)
+    posted_at: datetime = Field(index=True)
+    text: str
+    processed: bool = False
+    ingested_at: datetime = Field(default_factory=_utcnow)
+
+
+class ExternalSignal(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    external_message_id: int = Field(foreign_key="externalmessage.id", index=True)
+    channel: str = Field(index=True, max_length=64)
+    posted_at: datetime = Field(index=True)
+    symbol: str = Field(index=True, max_length=16)
+    side: str = Field(max_length=8)
+    entry_price: Decimal | None = None
+    stop_price: Decimal | None = None
+    target_price: Decimal | None = None
+    conviction: str | None = Field(default=None, max_length=16)
+    notes: str | None = None
+    created_at: datetime = Field(default_factory=_utcnow)

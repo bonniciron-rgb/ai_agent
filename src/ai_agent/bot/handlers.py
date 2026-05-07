@@ -101,3 +101,31 @@ class BotHandlers:
             return
 
         await update.message.reply_text("(i) Status: agent running normally.")
+
+    async def handle_config(self, update: object, context: object) -> None:
+        """/config show — display active external-signals configuration."""
+        try:
+            from telegram import Update
+        except ImportError:
+            return
+
+        if not isinstance(update, Update) or update.message is None:
+            return
+
+        try:
+            from ai_agent.external_signals.config import ExternalSignalsConfig
+
+            cfg = ExternalSignalsConfig.load()
+            lines = [
+                "<b>External Signals Config</b>",
+                f"Channels: {', '.join(cfg.channels)}",
+                f"Cadence: {cfg.cadence}",
+                f"Freshness: {cfg.freshness_days} days",
+                f"Backfill: {cfg.backfill_days} days",
+                f"Parser model: {cfg.parser_model}",
+                "",
+                "Edit <code>config/external_signals.yaml</code> in the repo to change these.",
+            ]
+            await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+        except Exception as exc:
+            await update.message.reply_text(f"Could not load config: {exc}")
