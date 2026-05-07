@@ -113,12 +113,8 @@ def test_ingest_multiple_channels() -> None:
     ch2 = "@OtherChannel"
     cfg = ExternalSignalsConfig(channels=[CHANNEL, ch2])
     readers = {
-        CHANNEL: FakeReader(
-            [RawMessage(message_id=10, channel=CHANNEL, posted_at=NOW, text="a")]
-        ),
-        ch2: FakeReader(
-            [RawMessage(message_id=20, channel=ch2, posted_at=NOW, text="b")]
-        ),
+        CHANNEL: FakeReader([RawMessage(message_id=10, channel=CHANNEL, posted_at=NOW, text="a")]),
+        ch2: FakeReader([RawMessage(message_id=20, channel=ch2, posted_at=NOW, text="b")]),
     }
 
     class _MultiReader:

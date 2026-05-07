@@ -99,7 +99,5 @@ def _build_client(api_key: str | None) -> Any:
     try:
         import anthropic
     except ImportError as exc:
-        raise ImportError(
-            "Install the 'agent' extra: pip install 'ai_agent[agent]'"
-        ) from exc
+        raise ImportError("Install the 'agent' extra: pip install 'ai_agent[agent]'") from exc
     return anthropic.Anthropic(api_key=api_key)

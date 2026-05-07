@@ -147,7 +147,9 @@ def _ingest_channel(
         result.new += 1
 
         try:
-            signals = parse_message(msg.text, model=config.parser_model, client=llm_client, api_key=api_key)
+            signals = parse_message(
+                msg.text, model=config.parser_model, client=llm_client, api_key=api_key
+            )
         except Exception as exc:
             logger.warning("Parser failed for message %d: %s", msg.message_id, exc)
             signals = []

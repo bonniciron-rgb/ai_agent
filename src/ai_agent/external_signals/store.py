@@ -61,7 +61,9 @@ def mark_processed(db_id: int) -> None:
             session.commit()
 
 
-def save_signal(signal: ParsedSignal, external_message_id: int, channel: str, posted_at: datetime) -> None:
+def save_signal(
+    signal: ParsedSignal, external_message_id: int, channel: str, posted_at: datetime
+) -> None:
     with get_session() as session:
         row = ExternalSignal(
             external_message_id=external_message_id,
