@@ -1,9 +1,32 @@
-export default function HomePage() {
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { SESSION_COOKIE, verifySession } from "@/lib/auth";
+
+export const dynamic = "force-dynamic";
+
+export default async function HomePage() {
+  const session = await verifySession(cookies().get(SESSION_COOKIE)?.value);
+  if (!session) redirect("/login");
+
   return (
     <main className="mx-auto max-w-3xl px-6 py-16">
-      <h1 className="text-3xl font-semibold tracking-tight">AI Trading Agent</h1>
+      <header className="flex items-baseline justify-between">
+        <h1 className="text-3xl font-semibold tracking-tight">
+          AI Trading Agent
+        </h1>
+        <div className="text-sm text-zinc-400">
+          {session.username ? `@${session.username}` : `user ${session.uid}`}
+          <a
+            href="/api/auth/logout"
+            className="ml-4 text-zinc-500 hover:text-zinc-300"
+          >
+            Sign out
+          </a>
+        </div>
+      </header>
+
       <p className="mt-3 text-zinc-400">
-        Dashboard scaffold. Sign-in and live data land in M13 / M14.
+        Dashboard scaffold. Live data lands in M14.
       </p>
 
       <section className="mt-10 rounded-lg border border-zinc-800 bg-zinc-900/50 p-6">
@@ -20,10 +43,12 @@ export default function HomePage() {
               /api/telegram_webhook
             </a>
           </dd>
-          <dt className="text-zinc-400">Frontend</dt>
-          <dd className="text-zinc-300">Next.js 14 (App Router)</dd>
           <dt className="text-zinc-400">Auth</dt>
-          <dd className="text-zinc-300">Telegram Login (pending — M13)</dd>
+          <dd className="text-emerald-400">Telegram session active</dd>
+          <dt className="text-zinc-400">Proposals</dt>
+          <dd className="text-zinc-500">— (M14)</dd>
+          <dt className="text-zinc-400">Orders</dt>
+          <dd className="text-zinc-500">— (M14)</dd>
         </dl>
       </section>
     </main>
