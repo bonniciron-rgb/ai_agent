@@ -66,6 +66,12 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/ai_agent"]
 
+[tool.uv]
+# Only resolve the lockfile for Python 3.12+ — Vercel uses 3.12 and several
+# transitive deps (pandas-ta, vectorbt) don't have a working solution for
+# the 3.11 resolution split. Local 3.11 dev still works via plain pip install.
+environments = ["python_full_version >= '3.12'"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"
