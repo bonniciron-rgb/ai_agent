@@ -175,3 +175,44 @@ class BotHandlers:
             await update.message.reply_text("\n".join(lines), parse_mode="HTML")
         except Exception as exc:
             await update.message.reply_text(f"Could not load config: {exc}")
+
+    async def handle_login(self, update: object, context: object) -> None:
+        """/login — DM a one-time magic link the user can tap to sign in.
+
+        Only the configured TELEGRAM_CHAT_ID is allowed; the webhook layer
+        already rejects updates from other chats, so this is just a defensive
+        re-check.
+        """
+        try:
+            from telegram import Update
+        except ImportError:
+            return
+
+        if not isinstance(update, Update) or update.message is None:
+            return
+
+        import os
+
+        from ai_agent.bot.magic_link import magic_link
+
+        chat = update.message.chat
+        if chat is None:
+            return
+
+        allowed = os.environ.get("TELEGRAM_CHAT_ID", "")
+        if allowed and str(chat.id) != str(allowed):
+            await update.message.reply_text("⚠️ Not authorized.")
+            return
+
+        base = os.environ.get("DASHBOARD_BASE_URL", "").strip()
+        if not base:
+            await update.message.reply_text(
+                "⚠️ DASHBOARD_BASE_URL not set on the server. Ask the operator to configure it.",
+            )
+            return
+
+        link = magic_link(base, chat.id)
+        await update.message.reply_text(
+            f"🔐 Sign in: {link}\n\nLink expires in 5 minutes.",
+            disable_web_page_preview=True,
+        )

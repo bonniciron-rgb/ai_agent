@@ -7,7 +7,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth";
 
-const PUBLIC_PATHS = ["/login", "/api/auth/telegram", "/api/auth/logout"];
+const PUBLIC_PATHS = [
+  "/login",
+  "/api/auth/telegram",
+  "/api/auth/logout",
+  "/auth/magic",
+];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
