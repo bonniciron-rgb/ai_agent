@@ -25,7 +25,7 @@ if str(_SRC) not in sys.path:
 _handle = None
 _import_error: str | None = None
 try:
-    from ai_agent.bot.webhook import handle as _handle  # noqa: E402
+    from ai_agent.bot.webhook import handle as _handle
 except Exception:
     _import_error = traceback.format_exc()
     print("=" * 60, file=sys.stderr)
