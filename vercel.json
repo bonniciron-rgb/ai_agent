@@ -1,5 +1,4 @@
 {
-  "buildCommand": "pip install -e .",
   "env": {
     "PYTHONUNBUFFERED": "1"
   }
