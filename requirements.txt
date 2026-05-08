@@ -1,3 +1,6 @@
+# Install the ai_agent package from the repo
+-e .
+
 # Base dependencies
 pydantic>=2.7
 pydantic-settings>=2.4
