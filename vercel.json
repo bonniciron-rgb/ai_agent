@@ -1,4 +1,5 @@
 {
+  "framework": "nextjs",
   "functions": {
     "api/telegram_webhook.py": {
       "includeFiles": "src/**"
