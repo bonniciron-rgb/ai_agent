@@ -6,7 +6,7 @@
  * client.  Pages that use it must be Server Components / route handlers.
  */
 
-import { sql } from "./db";
+import { getSql } from "./db";
 
 export type ProposalStatus =
   | "proposed"
@@ -70,6 +70,7 @@ export interface DashboardStats {
 }
 
 export async function isTradingHalted(): Promise<boolean> {
+  const sql = getSql();
   const rows = await sql<{ value: string }[]>`
     SELECT value FROM setting WHERE key = 'trading_halted' LIMIT 1
   `;
@@ -79,6 +80,7 @@ export async function isTradingHalted(): Promise<boolean> {
 }
 
 export async function getDashboardStats(): Promise<DashboardStats> {
+  const sql = getSql();
   const [halted, [proposalsToday], [proposalsPending], [ordersToday]] =
     await Promise.all([
       isTradingHalted(),
@@ -108,6 +110,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
 }
 
 export async function listRecentProposals(limit = 50): Promise<Proposal[]> {
+  const sql = getSql();
   return sql<Proposal[]>`
     SELECT
       id, created_at, expires_at, symbol, side, quantity::text AS quantity,
@@ -120,6 +123,7 @@ export async function listRecentProposals(limit = 50): Promise<Proposal[]> {
 }
 
 export async function getProposal(id: number): Promise<Proposal | null> {
+  const sql = getSql();
   const rows = await sql<Proposal[]>`
     SELECT
       id, created_at, expires_at, symbol, side, quantity::text AS quantity,
@@ -135,6 +139,7 @@ export async function getProposal(id: number): Promise<Proposal | null> {
 export async function getOrderForProposal(
   proposalId: number,
 ): Promise<Order | null> {
+  const sql = getSql();
   const rows = await sql<Order[]>`
     SELECT
       id, proposal_id, broker_order_id, symbol, side, order_type,
@@ -153,6 +158,7 @@ export async function getOrderForProposal(
 }
 
 export async function listRecentOrders(limit = 50): Promise<Order[]> {
+  const sql = getSql();
   return sql<Order[]>`
     SELECT
       id, proposal_id, broker_order_id, symbol, side, order_type,

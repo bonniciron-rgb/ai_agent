@@ -23,7 +23,7 @@ export default async function HomePage() {
       <main className="mx-auto max-w-5xl px-6 py-10">
         <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
 
-        {dbError && (
+        {dbError !== null ? (
           <div className="mt-6 rounded-lg border border-rose-900 bg-rose-950/50 p-4 text-sm text-rose-200">
             <p className="font-medium">Database query failed</p>
             <p className="mt-1 font-mono text-xs text-rose-300/80">{dbError}</p>
@@ -32,9 +32,7 @@ export default async function HomePage() {
               at the Neon pooled endpoint.
             </p>
           </div>
-        )}
-
-        {!dbError && (
+        ) : !("error" in stats) ? (
           <section className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard
               label="Status"
@@ -45,7 +43,7 @@ export default async function HomePage() {
             <StatCard label="Pending decisions" value={stats.proposals_pending} />
             <StatCard label="Orders today" value={stats.orders_today} />
           </section>
-        )}
+        ) : null}
 
         <section className="mt-10">
           <div className="flex items-baseline justify-between">
