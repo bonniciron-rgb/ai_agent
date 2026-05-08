@@ -1,0 +1,10 @@
+{
+  "functions": {
+    "api/telegram_webhook.py": {
+      "includeFiles": "src/**"
+    }
+  },
+  "env": {
+    "PYTHONUNBUFFERED": "1"
+  }
+}
