@@ -121,7 +121,7 @@ function StatCard({
   );
 }
 
-export function StatusPill({ status }: { status: string }) {
+function StatusPill({ status }: { status: string }) {
   const colors: Record<string, string> = {
     proposed: "bg-zinc-700 text-zinc-100",
     approved: "bg-blue-900 text-blue-200",
