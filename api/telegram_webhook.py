@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+import traceback
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 
@@ -18,7 +19,19 @@ _SRC = Path(__file__).resolve().parent.parent / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
-from ai_agent.bot.webhook import handle as _handle  # noqa: E402
+# Import lazily-captured: if the package import itself fails (missing deps,
+# missing env vars referenced at module top-level, etc.), capture the error so
+# we can return it in the response body instead of a generic 500.
+_handle = None
+_import_error: str | None = None
+try:
+    from ai_agent.bot.webhook import handle as _handle
+except Exception:
+    _import_error = traceback.format_exc()
+    print("=" * 60, file=sys.stderr)
+    print("FATAL: failed to import ai_agent.bot.webhook", file=sys.stderr)
+    print(_import_error, file=sys.stderr)
+    print("=" * 60, file=sys.stderr)
 
 
 class _Request:
@@ -34,10 +47,19 @@ class handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", "0") or "0")
         body = self.rfile.read(length) if length > 0 else b""
 
+        if _handle is None:
+            self._write(500, {"ok": False, "stage": "import", "error": _import_error})
+            return
+
         try:
             result = asyncio.run(_handle(_Request(body)))
         except Exception as exc:
-            self._write(500, {"ok": False, "error": str(exc)})
+            tb = traceback.format_exc()
+            print("=" * 60, file=sys.stderr)
+            print(f"WEBHOOK CRASH: {exc!r}", file=sys.stderr)
+            print(tb, file=sys.stderr)
+            print("=" * 60, file=sys.stderr)
+            self._write(500, {"ok": False, "stage": "runtime", "error": str(exc), "traceback": tb})
             return
 
         status = int(result.get("statusCode", 200))
@@ -45,6 +67,10 @@ class handler(BaseHTTPRequestHandler):
         self._write(status, response_body)
 
     def do_GET(self) -> None:
+        # Surface import status on the GET health check too.
+        if _handle is None:
+            self._write(500, {"ok": False, "stage": "import", "error": _import_error})
+            return
         self._write(200, {"ok": True, "service": "telegram_webhook"})
 
     def _write(self, status: int, body: dict | str | bytes) -> None:
