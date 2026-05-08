@@ -137,3 +137,12 @@ class ExternalSignal(SQLModel, table=True):
     conviction: str | None = Field(default=None, max_length=16)
     notes: str | None = None
     created_at: datetime = Field(default_factory=_utcnow)
+
+
+class Setting(SQLModel, table=True):
+    """Key-value runtime settings (halt flag, etc.) — toggleable from Telegram."""
+
+    key: str = Field(primary_key=True, max_length=64)
+    value: str = Field(max_length=256)
+    updated_at: datetime = Field(default_factory=_utcnow)
+    updated_by: str | None = Field(default=None, max_length=64)

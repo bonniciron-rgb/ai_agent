@@ -11,6 +11,7 @@ from ai_agent.db.models import (
     Position,
     Proposal,
     ProposalStatus,
+    Setting,
 )
 
 __all__ = [
@@ -25,6 +26,7 @@ __all__ = [
     "Position",
     "Proposal",
     "ProposalStatus",
+    "Setting",
     "create_engine_from_url",
     "get_engine",
     "get_session",
