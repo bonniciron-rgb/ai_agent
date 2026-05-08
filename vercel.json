@@ -1,10 +1,5 @@
 {
   "buildCommand": "pip install -e .",
-  "functions": {
-    "api/telegram_webhook.py": {
-      "runtime": "python3.12"
-    }
-  },
   "env": {
     "PYTHONUNBUFFERED": "1"
   }
