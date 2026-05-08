@@ -14,9 +14,17 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
 from http.server import BaseHTTPRequestHandler
+from pathlib import Path
 
-from ai_agent.bot.webhook import handle as _handle
+# Vercel bundles src/ via vercel.json's includeFiles, but the package isn't
+# pip-installed.  Put src/ on sys.path so `import ai_agent.*` resolves.
+_SRC = Path(__file__).resolve().parent.parent / "src"
+if str(_SRC) not in sys.path:
+    sys.path.insert(0, str(_SRC))
+
+from ai_agent.bot.webhook import handle as _handle  # noqa: E402
 
 
 class _Request:
