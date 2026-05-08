@@ -36,10 +36,22 @@ def _build_application():  # type: ignore[return]
 
     from ai_agent.bot.handlers import BotHandlers
     from ai_agent.bot.store import DbDecisionStore
+    from ai_agent.loop.order_executor import submit_order
 
     token = os.environ["TELEGRAM_BOT_TOKEN"]
     store = DbDecisionStore()
-    handlers = BotHandlers(store=store)
+
+    # Build a live T212 client if credentials are present; None = no-op (dry-run)
+    _order_executor = None
+    t212_api_key = os.environ.get("T212_API_KEY", "")
+    t212_base_url = os.environ.get("T212_BASE_URL", "https://demo.trading212.com")
+    if t212_api_key:
+        from ai_agent.broker.t212_client import T212Client
+
+        _t212 = T212Client(api_key=t212_api_key, base_url=t212_base_url)
+        _order_executor = lambda pid: submit_order(pid, _t212)  # noqa: E731
+
+    handlers = BotHandlers(store=store, order_executor=_order_executor)
 
     app = (
         Application.builder()

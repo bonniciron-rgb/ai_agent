@@ -31,10 +31,24 @@ class DecisionStore(Protocol):
 
 
 class BotHandlers:
-    """Stateless handler collection.  Inject *store* at construction time."""
+    """Stateless handler collection.  Inject *store* at construction time.
 
-    def __init__(self, store: DecisionStore) -> None:
+    Parameters
+    ----------
+    store:
+        DB-backed or fake DecisionStore for recording approve/reject decisions.
+    order_executor:
+        Optional callable ``(proposal_id: int) -> None`` invoked immediately
+        after a proposal is approved.  Pass ``None`` in dry-run / test mode.
+    """
+
+    def __init__(
+        self,
+        store: DecisionStore,
+        order_executor: object | None = None,
+    ) -> None:
         self._store = store
+        self._order_executor = order_executor  # callable(proposal_id) -> None | Order
 
     async def handle_callback(self, update: object, context: object) -> None:
         """Handle inline keyboard button presses."""
@@ -68,6 +82,13 @@ class BotHandlers:
         symbol = self._store.get_proposal_symbol(proposal_id) or "???"
         self._store.record_decision(proposal_id, action, decided_by)
         logger.info("Decision %s on proposal #%d by %s", action, proposal_id, decided_by)
+
+        if action == "approve" and self._order_executor is not None:
+            try:
+                self._order_executor(proposal_id)
+                logger.info("Order submitted for proposal #%d", proposal_id)
+            except Exception as exc:
+                logger.warning("Order execution failed for proposal #%d: %s", proposal_id, exc)
 
         msg = decision_message(action, proposal_id, symbol)
 
