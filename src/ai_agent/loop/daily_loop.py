@@ -215,7 +215,7 @@ def run(*, dry_run: bool = False) -> None:
     result = run_agent(
         watchlist.symbols,
         toolbox,
-        api_key=settings.anthropic_api_key.get_secret_value(),
+        api_key=settings.anthropic_api_key.get_secret_value() or None,
     )
     logger.info(
         "Agent finished: %d proposals, %d iterations",
