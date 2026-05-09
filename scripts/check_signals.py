@@ -291,8 +291,7 @@ def main() -> int:
     optional = [stooq_ok, news_ok]
     optional_passed = sum(1 for r in optional if r)
     print(
-        f" Required: {passed}/{total}  |  "
-        f"Optional: {optional_passed}/2 (Stooq fallback, NewsAPI)"
+        f" Required: {passed}/{total}  |  Optional: {optional_passed}/2 (Stooq fallback, NewsAPI)"
     )
     print("=" * 70)
 
