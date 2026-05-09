@@ -6,6 +6,9 @@ name: init-db
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/init_db.yml'
 
 permissions:
   contents: read
