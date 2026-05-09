@@ -312,6 +312,10 @@ def run(
         toolbox,
         client=anthropic_client,
         api_key=settings.anthropic_api_key.get_secret_value() or None,
+        tiered=settings.llm_tiered,
+        screening_model=settings.llm_screening_model,
+        decision_model=settings.llm_decision_model,
+        shortlist_max=settings.llm_shortlist_max,
     )
     logger.info(
         "Agent finished: %d proposals, %d iterations",
