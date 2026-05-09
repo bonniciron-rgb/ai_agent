@@ -2,6 +2,7 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from enum import StrEnum
 
+from sqlalchemy import Column, Text
 from sqlmodel import Field, SQLModel, UniqueConstraint
 
 
@@ -88,6 +89,7 @@ class Order(SQLModel, table=True):
     filled_quantity: Decimal = Decimal(0)
     avg_fill_price: Decimal | None = None
     raw_response: str | None = None
+    idempotency_key: str | None = Field(default=None, unique=True, index=True, max_length=64)
 
 
 class Position(SQLModel, table=True):
@@ -109,6 +111,10 @@ class LlmUsage(SQLModel, table=True):
     cache_write_tokens: int = 0
     cost_usd: Decimal
     purpose: str = Field(max_length=64)
+    # m18: tiered routing — "screening" | "decision" | "other"
+    pass_type: str = Field(default="other", max_length=16, index=True)
+    cache_creation_tokens: int = Field(default=0)
+    cache_read_input_tokens: int = Field(default=0)
     created_at: datetime = Field(default_factory=_utcnow)
 
 
@@ -159,3 +165,60 @@ class Setting(SQLModel, table=True):
     value: str = Field(max_length=256)
     updated_at: datetime = Field(default_factory=_utcnow)
     updated_by: str | None = Field(default=None, max_length=64)
+
+
+
+
+class Reconciliation(SQLModel, table=True):
+    """Record of each nightly reconciliation run comparing DB state with T212."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    run_at: datetime = Field(default_factory=_utcnow, index=True)
+    status: str = Field(max_length=16, index=True)  # "ok" | "drift_detected" | "error"
+    position_drifts: int = 0
+    order_drifts: int = 0
+    details: str | None = None  # JSON dump of mismatches for forensic review
+
+
+class ProposalReasoning(SQLModel, table=True):
+    """Full LLM prompt + response captured for every proposal the agent emits.
+
+    Written even in dry-run mode so we can audit reasoning quality offline.
+    """
+
+    id: int | None = Field(default=None, primary_key=True)
+    proposal_id: int = Field(foreign_key="proposal.id", index=True)
+    prompt_text: str = Field(sa_column=Column(Text, nullable=False))
+    response_text: str = Field(sa_column=Column(Text, nullable=False))
+    model: str = Field(max_length=64)
+    input_tokens: int
+    output_tokens: int
+    created_at: datetime = Field(default_factory=_utcnow)
+
+
+class ShadowDecision(StrEnum):
+    approved = "approved"
+    rejected = "rejected"
+    edited = "edited"
+    expired = "expired"
+
+
+class ShadowPosition(SQLModel, table=True):
+    """Hypothetical P&L tracker for every proposal, regardless of approval.
+
+    Opened when a proposal is created; decision flipped when the user acts;
+    closed when TP/SL is hit or after 5 trading days.
+    """
+
+    id: int | None = Field(default=None, primary_key=True)
+    proposal_id: int = Field(foreign_key="proposal.id", index=True)
+    symbol: str = Field(index=True, max_length=16)
+    side: str = Field(max_length=8)  # "buy" | "sell"
+    decision: str | None = Field(default=None, max_length=16)  # ShadowDecision or None
+    opened_at: datetime = Field(default_factory=_utcnow)
+    opened_price: float  # proposed limit price; falls back to that day's close
+    closed_at: datetime | None = None
+    closed_price: float | None = None
+    pnl: float | None = None  # computed when closed
+    mark_price: float | None = None  # last mark-to-market close
+    marked_at: datetime | None = None
