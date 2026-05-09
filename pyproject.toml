@@ -28,7 +28,6 @@ data = [
 features = [
     "pandas>=2.2",
     "numpy>=1.26",
-    "pandas-ta>=0.3.14b0",
 ]
 backtest = [
     "vectorbt>=0.26",
