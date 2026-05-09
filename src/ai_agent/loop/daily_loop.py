@@ -311,7 +311,7 @@ def run(
         watchlist.symbols,
         toolbox,
         client=anthropic_client,
-        api_key=settings.anthropic_api_key.get_secret_value(),
+        api_key=settings.anthropic_api_key.get_secret_value() or None,
     )
     logger.info(
         "Agent finished: %d proposals, %d iterations",
