@@ -35,6 +35,21 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .
 
+      - name: Check DATABASE_URL
+        run: |
+          python -c "
+          import os, sys
+          url = os.environ.get('DATABASE_URL', '')
+          if not url:
+              print('ERROR: DATABASE_URL secret is not set or is empty.')
+              print('Go to: GitHub repo -> Settings -> Secrets and variables -> Actions -> New repository secret')
+              print('Name: DATABASE_URL')
+              print('Value: your Neon connection string (postgresql://neondb_owner:...@...neon.tech/neondb?sslmode=require)')
+              sys.exit(1)
+          scheme = url.split('://')[0] if '://' in url else 'UNKNOWN'
+          print(f'DATABASE_URL is set. Scheme: {scheme}')
+          "
+
       - name: Initialize schema
         run: |
           python -c "from ai_agent.db.engine import init_schema; init_schema(); print('Schema initialized.')"
