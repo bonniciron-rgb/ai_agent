@@ -191,6 +191,10 @@ if __name__ == "__main__":
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
+    dry_run = os.environ.get("DRY_RUN", "").lower() in ("1", "true", "yes")
+    if dry_run:
+        print("DRY RUN — no DB writes, no messages saved.")
+        sys.exit(0)
     init_schema()
     results = run_ingest()
     total_signals = sum(r.signals_extracted for r in results)
