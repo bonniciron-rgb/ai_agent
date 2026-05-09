@@ -173,11 +173,21 @@ def check_t212() -> tuple[bool, str]:
         from ai_agent.settings import get_settings
 
         settings = get_settings()
-        client = T212Client(api_key=key, base_url=settings.t212_base_url)
-        cash = client.get_cash()
-        return True, f"{settings.t212_env.value} account: free={cash.free} {cash.currency}"
+        env_var = os.environ.get("T212_ENV", "(unset, defaulting to demo)")
+        url = settings.t212_base_url
+        key_preview = f"{key[:6]}...{key[-4:]}" if len(key) > 12 else "(too short)"
+        try:
+            client = T212Client(api_key=key, base_url=url)
+            cash = client.get_cash()
+            return (
+                True,
+                f"env={env_var} url={url} key={key_preview} free={cash.free} {cash.currency}",
+            )
+        except Exception as inner:
+            # Re-raise with diagnostic context
+            raise RuntimeError(f"env={env_var} url={url} key={key_preview} → {inner}") from inner
     except Exception as exc:
-        return False, str(exc)[:120]
+        return False, str(exc)[:200]
 
 
 def check_telegram_bot() -> tuple[bool, str]:
