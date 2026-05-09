@@ -5,10 +5,6 @@ name: signals-check
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.github/workflows/signals_check.yml'
-      - 'scripts/check_signals.py'
 
 permissions:
   contents: read

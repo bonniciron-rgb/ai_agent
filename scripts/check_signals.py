@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import os
 import sys
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, timedelta
 
 GREEN = "\033[92m"
 RED = "\033[91m"
@@ -170,7 +170,7 @@ def check_t212() -> tuple[bool, str]:
         return False, "T212_API_KEY not set"
     try:
         from ai_agent.broker.t212_client import T212Client
-        from ai_agent.settings import T212Env, get_settings
+        from ai_agent.settings import get_settings
 
         settings = get_settings()
         client = T212Client(api_key=key, env=settings.t212_env)
