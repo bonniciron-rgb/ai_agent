@@ -32,3 +32,9 @@ secrets/
 .idea/
 .vscode/
 *.swp
+
+# Next.js / Node
+.next/
+node_modules/
+tsconfig.tsbuildinfo
+next-env.d.ts
