@@ -226,3 +226,35 @@ export async function getRecentBars(
   `;
   return rows.reverse();
 }
+
+// ---------------------------------------------------------------------------
+// Signal channels
+// ---------------------------------------------------------------------------
+
+export interface SignalChannel {
+  id: number;
+  handle: string;
+  paused: boolean;
+  added_at: string;
+  last_run_at: string | null;
+  signal_count_7d: number;
+}
+
+export async function listSignalChannels(): Promise<SignalChannel[]> {
+  const sql = getSql();
+  return sql<SignalChannel[]>`
+    SELECT
+      sc.id,
+      sc.handle,
+      sc.paused,
+      sc.added_at::text AS added_at,
+      sc.last_run_at::text AS last_run_at,
+      COUNT(es.id)::int AS signal_count_7d
+    FROM signalchannel sc
+    LEFT JOIN externalsignal es
+      ON es.channel = sc.handle
+      AND es.posted_at >= NOW() - INTERVAL '7 days'
+    GROUP BY sc.id
+    ORDER BY sc.added_at ASC
+  `;
+}
