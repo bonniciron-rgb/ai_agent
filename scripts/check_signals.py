@@ -81,10 +81,10 @@ def check_sec_edgar() -> tuple[bool, str]:
 
         ua = os.environ.get("EDGAR_USER_AGENT", "ai_agent/0.1 (test@example.com)")
         src = EdgarSource(user_agent=ua)
-        filings = src.recent_filings("AAPL", forms=["10-K"], limit=1)
+        filings = src.recent_filings("AAPL", forms=("10-K",), limit=1)
         if not filings:
             return False, "no filings returned"
-        return True, f"latest 10-K: {filings[0].filed_at.date().isoformat()}"
+        return True, f"latest 10-K: {filings[0].filing_date.isoformat()}"
     except Exception as exc:
         return False, str(exc)[:120]
 
@@ -173,7 +173,7 @@ def check_t212() -> tuple[bool, str]:
         from ai_agent.settings import get_settings
 
         settings = get_settings()
-        client = T212Client(api_key=key, env=settings.t212_env)
+        client = T212Client(api_key=key, base_url=settings.t212_base_url)
         cash = client.get_cash()
         return True, f"{settings.t212_env.value} account: free={cash.free} {cash.currency}"
     except Exception as exc:
@@ -255,7 +255,7 @@ def main() -> int:
     yf_ok, yf_msg = check_yfinance()
     line("yfinance", yf_ok, yf_msg)
     stooq_ok, stooq_msg = check_stooq()
-    line("Stooq (fallback)", stooq_ok, stooq_msg)
+    line("Stooq (fallback)", stooq_ok, stooq_msg, optional=True)
     edgar_ok, edgar_msg = check_sec_edgar()
     line("SEC EDGAR", edgar_ok, edgar_msg)
 
@@ -285,11 +285,15 @@ def main() -> int:
     line("Telegram MTProto", tg_ok, tg_msg)
 
     print("\n" + "=" * 70)
-    required = [yf_ok, stooq_ok, edgar_ok, db_ok, anth_ok, finn_ok, fred_ok, t212_ok, bot_ok, tg_ok]
+    required = [yf_ok, edgar_ok, db_ok, anth_ok, finn_ok, fred_ok, t212_ok, bot_ok, tg_ok]
     passed = sum(1 for r in required if r)
     total = len(required)
-    optional_passed = sum([news_ok])
-    print(f" Required: {passed}/{total}  |  Optional: {optional_passed}/1 (NewsAPI)")
+    optional = [stooq_ok, news_ok]
+    optional_passed = sum(1 for r in optional if r)
+    print(
+        f" Required: {passed}/{total}  |  "
+        f"Optional: {optional_passed}/2 (Stooq fallback, NewsAPI)"
+    )
     print("=" * 70)
 
     return 0 if all(required) else 1
