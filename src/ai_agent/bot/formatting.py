@@ -1,22 +1,26 @@
 """Format trade proposals as Telegram messages with inline approval buttons.
 
-Each proposal gets a message like:
+Each proposal gets a message like::
 
-  📋 Trade Proposal #42
-  AAPL · BUY 10 shares
-  Limit: $175.00 | Stop: $168.00
-  Regime: trending_up | Confidence: high
+    📋 Trade Proposal #42
+    🟢 AAPL · BUY 10 shares
+    Limit: $175.00 | Stop: $168.00
+    Conf: 🟢 high | Regime: trending_up
 
-  Strong uptrend confirmed with ADX=28 and volume spike.
-  RSI=55 — not overbought.
+    Strong uptrend confirmed with ADX=28 and volume spike.
+    RSI=55 — not overbought.
 
-  [✅ Approve] [✏️ Edit] [❌ Reject] [⏭ Defer]
+    🔗 https://dashboard.example.com/proposals/42
+    [✅ Approve] [✏️ Edit] [❌ Reject] [⏭ Defer]
 
 Callback data format: ``<action>:<proposal_id>``
 Actions: approve, reject, defer, edit
 """
 
 from __future__ import annotations
+
+import os
+import re
 
 APPROVE = "approve"
 REJECT = "reject"
@@ -25,8 +29,42 @@ EDIT = "edit"
 
 ACTIONS = (APPROVE, REJECT, DEFER, EDIT)
 
-_CONFIDENCE_EMOJI = {"high": "🔥", "medium": "⚡", "low": "🌤"}
+# Traffic-light dots: green = high conviction, yellow = medium, red = low.
+_CONFIDENCE_EMOJI = {"high": "🟢", "medium": "🟡", "low": "🔴"}
 _SIDE_EMOJI = {"buy": "🟢", "sell": "🔴"}
+
+# Sentence boundary for the rationale truncation.  We keep the first three
+# sentences; anything longer gets a trailing ellipsis.  Markers: . ! ? followed
+# by whitespace or end-of-string.
+_SENTENCE_RE = re.compile(r"(?<=[.!?])\s+")
+
+
+def _truncate_sentences(text: str, max_sentences: int = 3) -> str:
+    """Return the first `max_sentences` sentences of `text`, with `…` if truncated."""
+    text = (text or "").strip()
+    if not text:
+        return ""
+    parts = _SENTENCE_RE.split(text)
+    if len(parts) <= max_sentences:
+        return text
+    return " ".join(parts[:max_sentences]).rstrip() + " …"
+
+
+def _resolve_dashboard_base_url() -> str | None:
+    """Return the dashboard base URL (no trailing slash), or None if unknown.
+
+    Matches the resolution order used by ``ai_agent.bot.handlers``:
+      1. ``DASHBOARD_BASE_URL`` env var, if it parses as ``http(s)://``.
+      2. ``https://{VERCEL_URL}`` if VERCEL_URL is set.
+      3. None.
+    """
+    raw = os.environ.get("DASHBOARD_BASE_URL", "").strip().rstrip("/")
+    if raw.startswith(("http://", "https://")):
+        return raw
+    vercel_url = os.environ.get("VERCEL_URL", "").strip().rstrip("/")
+    if vercel_url:
+        return f"https://{vercel_url}"
+    return None
 
 
 def proposal_message(
@@ -40,20 +78,33 @@ def proposal_message(
     confidence: str,
     regime: str | None = None,
 ) -> str:
-    """Return the plain-text body of the Telegram proposal message."""
+    """Return the plain-text body of the Telegram proposal message.
+
+    Includes a trimmed rationale (first 2-3 sentences), traffic-light
+    confidence emoji, and — when ``DASHBOARD_BASE_URL`` (or ``VERCEL_URL``)
+    is set — a deep link to the proposal-detail page on the dashboard.
+    """
     side_em = _SIDE_EMOJI.get(side.lower(), "")
     conf_em = _CONFIDENCE_EMOJI.get(confidence.lower(), "")
     stop_str = f" | Stop: ${stop_price}" if stop_price else ""
     regime_str = f" | Regime: {regime}" if regime else ""
+    short_rationale = _truncate_sentences(rationale, 3)
 
-    return (
-        f"📋 <b>Trade Proposal #{proposal_id}</b>\n"
-        f"{side_em} <b>{symbol}</b> · {side.upper()} {quantity} share{'s' if quantity != 1 else ''}\n"
-        f"Limit: ${limit_price}{stop_str}\n"
-        f"{conf_em} Confidence: {confidence}{regime_str}\n"
-        f"\n"
-        f"{rationale}"
-    )
+    lines = [
+        f"📋 <b>Trade Proposal #{proposal_id}</b>",
+        f"{side_em} <b>{symbol}</b> · {side.upper()} {quantity} share{'s' if quantity != 1 else ''}",
+        f"Limit: ${limit_price}{stop_str}",
+        f"Conf: {conf_em} {confidence}{regime_str}",
+        "",
+        short_rationale,
+    ]
+
+    base = _resolve_dashboard_base_url()
+    if base:
+        lines.append("")
+        lines.append(f"🔗 {base}/proposals/{proposal_id}")
+
+    return "\n".join(lines)
 
 
 def approval_keyboard(proposal_id: int) -> list[list[dict]]:
