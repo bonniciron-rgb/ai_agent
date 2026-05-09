@@ -1,6 +1,8 @@
 from ai_agent.db.engine import create_engine_from_url, get_engine, get_session
 from ai_agent.db.models import (
     Bar,
+    ExternalMessage,
+    ExternalSignal,
     LlmUsage,
     Order,
     OrderSide,
@@ -9,10 +11,13 @@ from ai_agent.db.models import (
     Position,
     Proposal,
     ProposalStatus,
+    Setting,
 )
 
 __all__ = [
     "Bar",
+    "ExternalMessage",
+    "ExternalSignal",
     "LlmUsage",
     "Order",
     "OrderSide",
@@ -21,6 +26,7 @@ __all__ = [
     "Position",
     "Proposal",
     "ProposalStatus",
+    "Setting",
     "create_engine_from_url",
     "get_engine",
     "get_session",

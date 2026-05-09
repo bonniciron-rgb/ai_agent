@@ -1,0 +1,66 @@
+name: init-db
+
+# Manually-triggered workflow that creates all SQLModel-defined tables
+# in the configured Neon Postgres database.  Idempotent (uses
+# CREATE TABLE IF NOT EXISTS under the hood) so it's safe to re-run.
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/init_db.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  init:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Check DATABASE_URL
+        run: |
+          python -c "
+          import os, sys
+          url = os.environ.get('DATABASE_URL', '')
+          if not url:
+              print('ERROR: DATABASE_URL secret is not set or is empty.')
+              print('Go to: GitHub repo -> Settings -> Secrets and variables -> Actions -> New repository secret')
+              print('Name: DATABASE_URL')
+              print('Value: your Neon connection string (postgresql://neondb_owner:...@...neon.tech/neondb?sslmode=require)')
+              sys.exit(1)
+          scheme = url.split('://')[0] if '://' in url else 'UNKNOWN'
+          print(f'DATABASE_URL is set. Scheme: {scheme}')
+          "
+
+      - name: Initialize schema
+        run: |
+          python -c "from ai_agent.db.engine import init_schema; init_schema(); print('Schema initialized.')"
+
+      - name: List tables
+        run: |
+          python -c "
+          from sqlalchemy import inspect
+          from ai_agent.db.engine import get_engine
+          insp = inspect(get_engine())
+          for t in sorted(insp.get_table_names()):
+              cols = ', '.join(c['name'] for c in insp.get_columns(t))
+              print(f'  {t}: {cols}')
+          "

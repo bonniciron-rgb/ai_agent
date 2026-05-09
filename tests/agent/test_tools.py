@@ -14,7 +14,13 @@ def test_tool_schemas_have_required_keys() -> None:
 
 def test_all_expected_tools_present() -> None:
     names = {s["name"] for s in TOOL_SCHEMAS}
-    assert names == {"get_features", "get_news", "get_portfolio", "propose_trade"}
+    assert names == {
+        "get_features",
+        "get_news",
+        "get_portfolio",
+        "get_external_signals",
+        "propose_trade",
+    }
 
 
 def test_toolbox_dispatch_get_features() -> None:
@@ -44,6 +50,32 @@ def test_toolbox_dispatch_unknown_tool_returns_error() -> None:
     )
     result = box.dispatch("nonexistent_tool", {})
     assert "error" in result
+
+
+def test_toolbox_get_external_signals_default_noop() -> None:
+    box = Toolbox(
+        get_features=lambda i: {},
+        get_news=lambda i: [],
+        get_portfolio=lambda i: {},
+        propose_trade=lambda i: i,
+    )
+    result = box.dispatch("get_external_signals", {"symbol": "AAPL"})
+    assert result == []
+
+
+def test_toolbox_get_external_signals_injected() -> None:
+    def fake_signals(inputs):
+        return [{"symbol": inputs["symbol"], "side": "buy"}]
+
+    box = Toolbox(
+        get_features=lambda i: {},
+        get_news=lambda i: [],
+        get_portfolio=lambda i: {},
+        propose_trade=lambda i: i,
+        get_external_signals=fake_signals,
+    )
+    result = box.dispatch("get_external_signals", {"symbol": "AAPL"})
+    assert result == [{"symbol": "AAPL", "side": "buy"}]
 
 
 def test_toolbox_propose_trade_recorded() -> None:

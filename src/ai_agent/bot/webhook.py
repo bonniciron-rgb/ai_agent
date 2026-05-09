@@ -49,7 +49,10 @@ def _build_application():  # type: ignore[return]
     )
     app.add_handler(CallbackQueryHandler(handlers.handle_callback))
     app.add_handler(CommandHandler("halt", handlers.handle_halt))
+    app.add_handler(CommandHandler("resume", handlers.handle_resume))
     app.add_handler(CommandHandler("status", handlers.handle_status))
+    app.add_handler(CommandHandler("config", handlers.handle_config))
+    app.add_handler(CommandHandler("login", handlers.handle_login))
     return app
 
 

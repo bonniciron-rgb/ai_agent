@@ -4,22 +4,18 @@ Called once per trading day at ~06:30 UTC (before US pre-market open).
 
 Steps
 -----
-1. Init DB schema (idempotent, safe to run every day).
-2. Load watchlist from ``watchlist.yaml``.
-3. Build T212 client + LivePortfolioSnapshot.
-4. Run the Claude agent to generate proposals.
-5. Filter each proposal through RiskChecker.
-6. Persist approved proposals to Postgres.
-7. Send the Telegram digest.
+1. Init DB schema (idempotent).
+2. Load watchlist from ``config/watchlist.yaml`` (or ``$WATCHLIST_PATH``).
+3. Check the DB-backed halt flag (toggled by ``/halt`` Telegram command).
+4. Ingest fresh OHLCV bars for every watchlist symbol (yfinance + Stooq fallback).
+5. Build T212 client + LivePortfolioSnapshot.
+6. Run the Claude agent with a Toolbox wired to live data.
+7. Filter each proposal through RiskChecker (5 rails).
+8. Persist passing proposals to Postgres and send the Telegram digest.
 
 Run locally::
 
-    python -m ai_agent.loop.daily_loop
-
-Environment variables (see Settings)::
-
-    DATABASE_URL, ANTHROPIC_API_KEY, T212_API_KEY, TELEGRAM_BOT_TOKEN,
-    TELEGRAM_CHAT_ID, WATCHLIST_PATH (default: watchlist.yaml)
+    python -m ai_agent.loop.daily_loop --dry-run
 """
 
 from __future__ import annotations
@@ -28,14 +24,17 @@ import asyncio
 import logging
 import os
 import sys
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 from ai_agent.agent.runner import run_agent
 from ai_agent.agent.tools import Toolbox
 from ai_agent.db.engine import get_session, init_schema
 from ai_agent.db.models import OrderSide, Proposal, ProposalStatus
+from ai_agent.db.settings_store import is_trading_halted
+from ai_agent.loop.bar_store import bars_from_db, ingest_bars
 from ai_agent.loop.portfolio_snapshot import LivePortfolioSnapshot
 from ai_agent.risk.rails import RiskChecker
 from ai_agent.settings import get_settings
@@ -43,32 +42,70 @@ from ai_agent.watchlist import load_watchlist
 
 logger = logging.getLogger(__name__)
 
-WATCHLIST_PATH = Path(os.environ.get("WATCHLIST_PATH", "watchlist.yaml"))
+WATCHLIST_PATH = Path(os.environ.get("WATCHLIST_PATH", "config/watchlist.yaml"))
 PROPOSAL_TTL_HOURS = 24
+BAR_DAYS_BACK = 300  # ~250 trading days, enough for SMA-200 + warmup
+NEWS_DAYS_BACK = 7
 
 
-def _build_toolbox(t212_client, portfolio_snapshot: LivePortfolioSnapshot) -> Toolbox:
+# ---------------------------------------------------------------------------
+# Live data sources
+# ---------------------------------------------------------------------------
+
+
+def _build_default_ohlcv_source():
+    """Construct the default OHLCV source chain: yfinance → Stooq fallback."""
+    from ai_agent.data.registry import OhlcvChain
+    from ai_agent.data.stooq_source import StooqSource
+    from ai_agent.data.yfinance_source import YFinanceSource
+
+    return OhlcvChain([YFinanceSource(), StooqSource()])
+
+
+def _build_finnhub_source(api_key: str):
+    """Return a FinnhubSource if the API key is set, else None."""
+    if not api_key:
+        return None
+    from ai_agent.data.finnhub_source import FinnhubSource
+
+    return FinnhubSource(api_key=api_key)
+
+
+def _build_toolbox(
+    portfolio_snapshot: LivePortfolioSnapshot,
+    *,
+    finnhub_source: Any | None = None,
+    today: date | None = None,
+) -> Toolbox:
     """Wire live data sources into the agent Toolbox."""
-    from ai_agent.data.features import FeaturePipeline
+    from ai_agent.features.pipeline import compute_features
 
-    pipeline = FeaturePipeline()
+    ref_date = today or datetime.now(UTC).date()
 
     def get_features(inputs: dict) -> dict:
         symbol = inputs["symbol"]
         try:
-            snap = pipeline.snapshot(symbol)
-            return snap.model_dump() if hasattr(snap, "model_dump") else dict(snap)
+            series = bars_from_db(symbol, days_back=BAR_DAYS_BACK, ref_date=ref_date)
+            if not series.points:
+                return {"error": f"no bars in DB for {symbol}"}
+            snap = compute_features(series)
+            return snap.model_dump(mode="json")
         except Exception as exc:
             logger.warning("get_features failed for %s: %s", symbol, exc)
             return {"error": str(exc)}
 
     def get_news(inputs: dict) -> list[dict]:
-        from ai_agent.data.news import fetch_finnhub_news
-
+        if finnhub_source is None:
+            return []
         symbol = inputs["symbol"]
         limit = int(inputs.get("limit", 5))
         try:
-            return fetch_finnhub_news(symbol, limit=limit)
+            items = finnhub_source.company_news(
+                symbol,
+                start=ref_date - timedelta(days=NEWS_DAYS_BACK),
+                end=ref_date,
+            )
+            return [item.model_dump(mode="json") for item in items[:limit]]
         except Exception as exc:
             logger.warning("get_news failed for %s: %s", symbol, exc)
             return []
@@ -80,10 +117,7 @@ def _build_toolbox(t212_client, portfolio_snapshot: LivePortfolioSnapshot) -> To
         }
 
     def propose_trade(inputs: dict):
-        from decimal import Decimal
-
         from ai_agent.agent.proposals import TradeProposal
-        from ai_agent.db.models import OrderSide
 
         return TradeProposal(
             symbol=inputs["symbol"],
@@ -95,15 +129,45 @@ def _build_toolbox(t212_client, portfolio_snapshot: LivePortfolioSnapshot) -> To
             confidence=inputs["confidence"],
         )
 
+    def get_external_signals(inputs: dict) -> list[dict]:
+        from ai_agent.external_signals.store import get_signals_for_symbol
+
+        symbol = inputs["symbol"]
+        days_back = int(inputs.get("days_back", 7))
+        try:
+            rows = get_signals_for_symbol(symbol, days_back=days_back)
+            return [
+                {
+                    "channel": r.channel,
+                    "posted_at": r.posted_at.isoformat(),
+                    "side": r.side,
+                    "entry_price": float(r.entry_price) if r.entry_price else None,
+                    "stop_price": float(r.stop_price) if r.stop_price else None,
+                    "target_price": float(r.target_price) if r.target_price else None,
+                    "conviction": r.conviction,
+                    "notes": r.notes,
+                }
+                for r in rows
+            ]
+        except Exception as exc:
+            logger.warning("get_external_signals failed for %s: %s", symbol, exc)
+            return []
+
     return Toolbox(
         get_features=get_features,
         get_news=get_news,
         get_portfolio=get_portfolio,
         propose_trade=propose_trade,
+        get_external_signals=get_external_signals,
     )
 
 
-def _save_proposals(proposals, settings) -> list[Proposal]:
+# ---------------------------------------------------------------------------
+# Persistence
+# ---------------------------------------------------------------------------
+
+
+def _save_proposals(proposals) -> list[Proposal]:
     """Persist TradeProposal objects to DB; return saved Proposal ORM rows."""
     saved: list[Proposal] = []
     expires_at = datetime.now(UTC) + timedelta(hours=PROPOSAL_TTL_HOURS)
@@ -121,18 +185,12 @@ def _save_proposals(proposals, settings) -> list[Proposal]:
                 status=ProposalStatus.proposed,
             )
             session.add(row)
-            session.flush()  # populate row.id before commit
+            session.flush()
             saved.append(row)
         session.commit()
-        # Refresh to get assigned IDs
         for row in saved:
             session.refresh(row)
     return saved
-
-
-def _check_halt() -> bool:
-    """Return True if the TRADING_HALTED env var is set (toggled by /halt Telegram command)."""
-    return os.environ.get("TRADING_HALTED", "").lower() in ("1", "true", "yes")
 
 
 async def _send_digest(saved_proposals: list[Proposal], settings) -> None:
@@ -169,8 +227,25 @@ async def _send_digest(saved_proposals: list[Proposal], settings) -> None:
         await send_proposals(bot, chat_id, proposal_dicts)
 
 
-def run(*, dry_run: bool = False) -> None:
-    """Main entry point.  Set dry_run=True to skip DB writes and Telegram."""
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
+
+def run(
+    *,
+    dry_run: bool = False,
+    ohlcv_source: Any | None = None,
+    finnhub_source: Any | None = None,
+    t212_client: Any | None = None,
+    anthropic_client: Any | None = None,
+    today: date | None = None,
+) -> None:
+    """Main entry point.
+
+    All external collaborators can be injected for the smoke test; in production
+    the cron just calls ``run(dry_run=False)`` and everything is built from env vars.
+    """
     settings = get_settings()
 
     logging.basicConfig(
@@ -180,9 +255,7 @@ def run(*, dry_run: bool = False) -> None:
     logger.info("Daily loop starting (dry_run=%s)", dry_run)
 
     # 1. DB schema
-    if not dry_run:
-        init_schema()
-        logger.info("DB schema initialised")
+    init_schema()
 
     # 2. Watchlist
     if not WATCHLIST_PATH.exists():
@@ -195,26 +268,49 @@ def run(*, dry_run: bool = False) -> None:
     logger.info("Watchlist: %s", watchlist.symbols)
 
     # 3. Halt check
-    if _check_halt():
+    if is_trading_halted():
         logger.warning("Trading is halted — skipping agent run")
         return
 
-    # 4. T212 + portfolio snapshot
-    from ai_agent.broker.t212_client import T212Client
-
-    t212 = T212Client(
-        api_key=settings.t212_api_key.get_secret_value(),
-        base_url=settings.t212_base_url,
+    # 4. Bar ingestion (idempotent — duplicates are skipped)
+    if ohlcv_source is None:
+        ohlcv_source = _build_default_ohlcv_source()
+    inserted = ingest_bars(
+        watchlist.symbols,
+        source=ohlcv_source,
+        days_back=BAR_DAYS_BACK,
+        today=today,
     )
+    logger.info("Ingested %d new bars", inserted)
+
+    # 5. T212 + portfolio snapshot
+    if t212_client is None:
+        from ai_agent.broker.t212_client import T212Client
+
+        t212_client = T212Client(
+            api_key=settings.t212_api_key.get_secret_value(),
+            base_url=settings.t212_base_url,
+        )
     sector_map = {e.symbol: e.sector for e in watchlist.entries if e.sector}
-    portfolio = LivePortfolioSnapshot(t212, watchlist_sectors=sector_map)
+    portfolio = LivePortfolioSnapshot(
+        t212_client,
+        watchlist_sectors=sector_map,
+        reference_date=today,
+    )
     logger.info("Portfolio NAV: %s", portfolio.nav)
 
-    # 5. Agent
-    toolbox = _build_toolbox(t212, portfolio)
+    # 6. Agent
+    if finnhub_source is None:
+        finnhub_source = _build_finnhub_source(settings.finnhub_api_key.get_secret_value())
+    toolbox = _build_toolbox(
+        portfolio,
+        finnhub_source=finnhub_source,
+        today=today,
+    )
     result = run_agent(
         watchlist.symbols,
         toolbox,
+        client=anthropic_client,
         api_key=settings.anthropic_api_key.get_secret_value() or None,
     )
     logger.info(
@@ -223,7 +319,7 @@ def run(*, dry_run: bool = False) -> None:
         result.iterations,
     )
 
-    # 6. Risk filter
+    # 7. Risk filter
     checker = RiskChecker(portfolio=portfolio)
     passing: list = []
     for proposal in result.proposals:
@@ -243,14 +339,14 @@ def run(*, dry_run: bool = False) -> None:
 
     logger.info("%d/%d proposals passed risk rails", len(passing), len(result.proposals))
 
-    # 7. Persist + digest
+    # 8. Persist + digest
     if dry_run:
         logger.info("[dry_run] Would save %d proposals and send digest", len(passing))
         for p in passing:
             logger.info("  %s %s x%d @ %s", p.side, p.symbol, p.quantity, p.limit_price)
         return
 
-    saved = _save_proposals(passing, settings)
+    saved = _save_proposals(passing)
     logger.info("Saved %d proposals to DB", len(saved))
 
     asyncio.run(_send_digest(saved, settings))

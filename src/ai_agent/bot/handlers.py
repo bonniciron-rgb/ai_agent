@@ -78,7 +78,7 @@ class BotHandlers:
             await query.edit_message_text(msg)
 
     async def handle_halt(self, update: object, context: object) -> None:
-        """/halt command — sets a halt flag that the daily loop checks."""
+        """/halt — set the DB-backed halt flag.  The daily cron checks it before each run."""
         try:
             from telegram import Update
         except ImportError:
@@ -87,11 +87,50 @@ class BotHandlers:
         if not isinstance(update, Update) or update.message is None:
             return
 
-        self._store.record_decision(-1, "halt", "system")
-        await update.message.reply_text("🛑 Trading halted. Use /resume to restart.")
+        try:
+            from ai_agent.db.settings_store import set_trading_halted
+
+            user = update.message.from_user
+            decided_by = (
+                f"@{user.username}"
+                if user and user.username
+                else str(user.id if user else "system")
+            )
+            set_trading_halted(True, updated_by=decided_by)
+            await update.message.reply_text(
+                "🛑 Trading halted. Use /resume to restart.",
+            )
+        except Exception as exc:
+            logger.exception("Failed to set halt flag")
+            await update.message.reply_text(f"⚠️ Could not halt: {exc}")
+
+    async def handle_resume(self, update: object, context: object) -> None:
+        """/resume — clear the halt flag so the next cron run will execute."""
+        try:
+            from telegram import Update
+        except ImportError:
+            return
+
+        if not isinstance(update, Update) or update.message is None:
+            return
+
+        try:
+            from ai_agent.db.settings_store import set_trading_halted
+
+            user = update.message.from_user
+            decided_by = (
+                f"@{user.username}"
+                if user and user.username
+                else str(user.id if user else "system")
+            )
+            set_trading_halted(False, updated_by=decided_by)
+            await update.message.reply_text("✅ Trading resumed. Next cron run will execute.")
+        except Exception as exc:
+            logger.exception("Failed to clear halt flag")
+            await update.message.reply_text(f"⚠️ Could not resume: {exc}")
 
     async def handle_status(self, update: object, context: object) -> None:
-        """/status command — replies with pending proposal count."""
+        """/status — show halt state and pending proposal count."""
         try:
             from telegram import Update
         except ImportError:
@@ -100,4 +139,107 @@ class BotHandlers:
         if not isinstance(update, Update) or update.message is None:
             return
 
-        await update.message.reply_text("(i) Status: agent running normally.")
+        try:
+            from ai_agent.db.settings_store import is_trading_halted
+
+            halted = is_trading_halted()
+            state = "🛑 HALTED" if halted else "✅ running"
+            await update.message.reply_text(f"Status: {state}")
+        except Exception as exc:
+            await update.message.reply_text(f"Status check failed: {exc}")
+
+    async def handle_config(self, update: object, context: object) -> None:
+        """/config show — display active external-signals configuration."""
+        try:
+            from telegram import Update
+        except ImportError:
+            return
+
+        if not isinstance(update, Update) or update.message is None:
+            return
+
+        try:
+            from ai_agent.external_signals.config import ExternalSignalsConfig
+
+            cfg = ExternalSignalsConfig.load()
+            lines = [
+                "<b>External Signals Config</b>",
+                f"Channels: {', '.join(cfg.channels)}",
+                f"Cadence: {cfg.cadence}",
+                f"Freshness: {cfg.freshness_days} days",
+                f"Backfill: {cfg.backfill_days} days",
+                f"Parser model: {cfg.parser_model}",
+                "",
+                "Edit <code>config/external_signals.yaml</code> in the repo to change these.",
+            ]
+            await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+        except Exception as exc:
+            await update.message.reply_text(f"Could not load config: {exc}")
+
+    async def handle_login(self, update: object, context: object) -> None:
+        """/login — DM a one-time magic link the user can tap to sign in.
+
+        Only the configured TELEGRAM_CHAT_ID is allowed; the webhook layer
+        already rejects updates from other chats, so this is just a defensive
+        re-check.
+        """
+        try:
+            from telegram import Update
+        except ImportError:
+            return
+
+        if not isinstance(update, Update) or update.message is None:
+            return
+
+        import os
+
+        from ai_agent.bot.magic_link import magic_link
+
+        chat = update.message.chat
+        if chat is None:
+            return
+
+        allowed = os.environ.get("TELEGRAM_CHAT_ID", "")
+        if allowed and str(chat.id) != str(allowed):
+            await update.message.reply_text("⚠️ Not authorized.")
+            return
+
+        base = _resolve_dashboard_base_url()
+        if not base:
+            await update.message.reply_text(
+                "⚠️ Could not determine dashboard URL. Set DASHBOARD_BASE_URL "
+                "in Vercel to https://<your-project>.vercel.app",
+            )
+            return
+
+        link = magic_link(base, chat.id)
+        await update.message.reply_text(
+            f"🔐 Sign in: {link}\n\nLink expires in 5 minutes.",
+            disable_web_page_preview=True,
+        )
+
+
+def _resolve_dashboard_base_url() -> str | None:
+    """Return the dashboard URL the bot should embed in magic links.
+
+    Resolution order:
+      1. DASHBOARD_BASE_URL env var, if it's a valid http:// or https:// URL.
+         (We reject obviously-wrong values like a postgres connection string,
+         which is a foot-gun we hit in production once.)
+      2. ``https://{VERCEL_URL}`` — Vercel auto-sets VERCEL_URL on every deploy
+         to the deployment hostname.  Magic links from this URL still work
+         because Vercel routes all aliases of the same project to the same
+         deployment.
+      3. None — the operator needs to configure it.
+    """
+    import os
+
+    raw = os.environ.get("DASHBOARD_BASE_URL", "").strip().rstrip("/")
+    if raw.startswith(("http://", "https://")):
+        return raw
+
+    vercel_url = os.environ.get("VERCEL_URL", "").strip()
+    if vercel_url:
+        return f"https://{vercel_url}"
+
+    return None

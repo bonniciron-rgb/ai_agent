@@ -28,7 +28,6 @@ data = [
 features = [
     "pandas>=2.2",
     "numpy>=1.26",
-    "pandas-ta>=0.3.14b0",
 ]
 backtest = [
     "vectorbt>=0.26",
@@ -39,8 +38,11 @@ agent = [
 bot = [
     "python-telegram-bot[webhooks]>=21.6",
 ]
+signals = [
+    "telethon>=1.36",
+]
 production = [
-    "ai_agent[data,features,agent,bot]",
+    "ai_agent[data,features,agent,bot,signals]",
 ]
 broker = [
     "httpx>=0.27",
@@ -62,6 +64,12 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/ai_agent"]
+
+[tool.uv]
+# Only resolve the lockfile for Python 3.12+ — Vercel uses 3.12 and several
+# transitive deps (pandas-ta, vectorbt) don't have a working solution for
+# the 3.11 resolution split. Local 3.11 dev still works via plain pip install.
+environments = ["python_full_version >= '3.12'"]
 
 [tool.ruff]
 line-length = 100
