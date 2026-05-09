@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { Nav } from "@/app/components/Nav";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth";
-import { listSignalChannels } from "@/lib/queries";
+import { listSignalChannels, type SignalChannel } from "@/lib/queries";
 import { SignalsClient } from "./SignalsClient";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +12,7 @@ export default async function SignalsPage() {
   const session = token ? await verifySession(token) : null;
   if (!session) redirect("/login");
 
-  let channels = [];
+  let channels: SignalChannel[] = [];
   let fetchError: string | null = null;
   try {
     channels = await listSignalChannels();
