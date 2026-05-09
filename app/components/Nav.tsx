@@ -26,6 +26,9 @@ export function Nav({ session }: NavProps) {
             <Link href="/watchlist" className="hover:text-zinc-100">
               Watchlist
             </Link>
+            <Link href="/signals" className="hover:text-zinc-100">
+              Signals
+            </Link>
           </nav>
         </div>
         <div className="text-sm text-zinc-500">

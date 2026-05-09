@@ -139,6 +139,19 @@ class ExternalSignal(SQLModel, table=True):
     created_at: datetime = Field(default_factory=_utcnow)
 
 
+class SignalChannel(SQLModel, table=True):
+    """DB-backed list of Telegram channels to ingest signals from.
+
+    Bootstrapped from config/external_signals.yaml on first ingest run.
+    """
+
+    id: int | None = Field(default=None, primary_key=True)
+    handle: str = Field(index=True, unique=True, max_length=64)
+    paused: bool = Field(default=False, index=True)
+    added_at: datetime = Field(default_factory=_utcnow)
+    last_run_at: datetime | None = None
+
+
 class Setting(SQLModel, table=True):
     """Key-value runtime settings (halt flag, etc.) — toggleable from Telegram."""
 

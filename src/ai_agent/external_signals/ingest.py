@@ -26,6 +26,11 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from ai_agent.db.engine import init_schema
+from ai_agent.external_signals.channel_store import (
+    bootstrap_from_yaml,
+    list_active_channels,
+    mark_channel_run,
+)
 from ai_agent.external_signals.client import ChannelReaderProtocol, TelegramChannelReader
 from ai_agent.external_signals.config import ExternalSignalsConfig
 from ai_agent.external_signals.models import RawMessage
@@ -81,8 +86,12 @@ def run_ingest(
     if reader is None:
         reader = _build_reader()
 
+    # Bootstrap DB from YAML on first run, then use DB as source of truth
+    bootstrap_from_yaml(config.channels)
+    active_channels = list_active_channels() or config.channels
+
     results: list[IngestResult] = []
-    for channel in config.channels:
+    for channel in active_channels:
         result = _ingest_channel(
             channel,
             config=config,
@@ -99,6 +108,7 @@ def run_ingest(
             result.signals_extracted,
             result.errors,
         )
+        mark_channel_run(channel)
     return results
 
 
