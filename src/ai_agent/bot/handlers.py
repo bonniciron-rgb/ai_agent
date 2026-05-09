@@ -204,10 +204,11 @@ class BotHandlers:
             await update.message.reply_text("⚠️ Not authorized.")
             return
 
-        base = os.environ.get("DASHBOARD_BASE_URL", "").strip()
+        base = _resolve_dashboard_base_url()
         if not base:
             await update.message.reply_text(
-                "⚠️ DASHBOARD_BASE_URL not set on the server. Ask the operator to configure it.",
+                "⚠️ Could not determine dashboard URL. Set DASHBOARD_BASE_URL "
+                "in Vercel to https://<your-project>.vercel.app",
             )
             return
 
@@ -216,3 +217,29 @@ class BotHandlers:
             f"🔐 Sign in: {link}\n\nLink expires in 5 minutes.",
             disable_web_page_preview=True,
         )
+
+
+def _resolve_dashboard_base_url() -> str | None:
+    """Return the dashboard URL the bot should embed in magic links.
+
+    Resolution order:
+      1. DASHBOARD_BASE_URL env var, if it's a valid http:// or https:// URL.
+         (We reject obviously-wrong values like a postgres connection string,
+         which is a foot-gun we hit in production once.)
+      2. ``https://{VERCEL_URL}`` — Vercel auto-sets VERCEL_URL on every deploy
+         to the deployment hostname.  Magic links from this URL still work
+         because Vercel routes all aliases of the same project to the same
+         deployment.
+      3. None — the operator needs to configure it.
+    """
+    import os
+
+    raw = os.environ.get("DASHBOARD_BASE_URL", "").strip().rstrip("/")
+    if raw.startswith(("http://", "https://")):
+        return raw
+
+    vercel_url = os.environ.get("VERCEL_URL", "").strip()
+    if vercel_url:
+        return f"https://{vercel_url}"
+
+    return None
