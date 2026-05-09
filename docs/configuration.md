@@ -67,7 +67,7 @@ Vercel detects `api/telegram_webhook.py` automatically and serves it at `/api/te
 
 ## Step 3 — Vercel environment variables
 
-The webhook needs three env vars to function.
+The webhook and dashboard need several env vars to function.
 
 In Vercel → **Project → Settings → Environment Variables**, add:
 
@@ -76,6 +76,8 @@ In Vercel → **Project → Settings → Environment Variables**, add:
 | `TELEGRAM_BOT_TOKEN` | `123456:ABC-DEF…` | [@BotFather](https://t.me/botfather) `/newbot` |
 | `TELEGRAM_CHAT_ID` | `-1001234567890` | See "How to find chat ID" below |
 | `DATABASE_URL` | `postgresql://…` | From Step 1 |
+| `DASHBOARD_BASE_URL` | `https://ai-agent-abc123.vercel.app` | Your Vercel production URL (from Step 2) — **no trailing slash** |
+| `NEXT_PUBLIC_TELEGRAM_BOT_USERNAME` | `my_trading_bot` | Bot username (no `@`) — exposes the bot link in the dashboard login page |
 
 Apply to all environments (Production / Preview / Development). After saving, **Redeploy** the latest deployment so the new vars take effect.
 
@@ -85,6 +87,18 @@ Apply to all environments (Production / Preview / Development). After saving, **
 2. Send any message in the chat (`hello`).
 3. Open `https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates` in a browser.
 4. Find `"chat":{"id":-1001234567890,…}` in the JSON. Use the integer (with the leading `-` for groups/channels).
+
+---
+
+## Step 3b — Verify environment variables on Vercel
+
+After setting the four env vars above, verify they're deployed:
+
+1. Go to Vercel → **Deployments → Latest deployment → Logs**.
+2. Send `/status` in your Telegram group.
+3. If the bot replies, the webhook is working.
+4. Send `/login` in your Telegram group.
+5. The bot should reply with a clickable magic link. If it says `"Could not determine dashboard URL"`, then `DASHBOARD_BASE_URL` is not set correctly.
 
 ---
 
@@ -111,6 +125,24 @@ curl "https://api.telegram.org/bot<TOKEN>/getWebhookInfo"
 # remove (e.g., to switch back to polling for local testing)
 curl "https://api.telegram.org/bot<TOKEN>/deleteWebhook"
 ```
+
+---
+
+## Step 4b — Dashboard login (desktop & mobile)
+
+Once `DASHBOARD_BASE_URL` is configured, users can log in to the dashboard from any device.
+
+**Login flow:**
+1. Open `https://<your-vercel-url>` in a browser (desktop or mobile).
+2. You'll see the login page with instructions.
+3. Send `/login` to the bot via Telegram (from the same account configured as `TELEGRAM_CHAT_ID`).
+4. The bot replies with a clickable magic link. The link is valid for 5 minutes.
+5. Click the link from inside Telegram (it opens in your browser).
+6. You're logged in — session cookie is valid for 7 days.
+
+**On desktop:** You can have Telegram open in a separate window, click the link from the bot, and it opens your dashboard in the browser.
+
+**On mobile:** The link opens directly in your browser.
 
 ---
 
