@@ -258,3 +258,127 @@ export async function listSignalChannels(): Promise<SignalChannel[]> {
     ORDER BY sc.added_at ASC
   `;
 }
+
+// ---------------------------------------------------------------------------
+// Proposal reasoning (m16)
+// ---------------------------------------------------------------------------
+
+export interface ProposalReasoning {
+  id: number;
+  proposal_id: number;
+  prompt_text: string;
+  response_text: string;
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  created_at: Date;
+}
+
+export async function getProposalReasoning(
+  proposalId: number,
+): Promise<ProposalReasoning | null> {
+  const sql = getSql();
+  const rows = await sql<ProposalReasoning[]>`
+    SELECT id, proposal_id, prompt_text, response_text, model,
+           input_tokens::int AS input_tokens,
+           output_tokens::int AS output_tokens,
+           created_at
+    FROM proposalreasoning
+    WHERE proposal_id = ${proposalId}
+    ORDER BY created_at DESC
+    LIMIT 1
+  `;
+  return rows[0] ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Shadow positions (m16)
+// ---------------------------------------------------------------------------
+
+export interface ShadowPosition {
+  id: number;
+  proposal_id: number;
+  symbol: string;
+  side: string;
+  decision: string | null;
+  opened_at: Date;
+  opened_price: number;
+  closed_at: Date | null;
+  closed_price: number | null;
+  pnl: number | null;
+  mark_price: number | null;
+  marked_at: Date | null;
+}
+
+export interface ShadowWindowStats {
+  window_days: number;
+  approved_pnl: number;
+  approved_count: number;
+  rejected_pnl: number;
+  rejected_count: number;
+}
+
+export async function getShadowWindowStats(
+  windowDays: number,
+): Promise<ShadowWindowStats> {
+  const sql = getSql();
+  const rows = await sql<
+    {
+      decision: string | null;
+      total_pnl: number;
+      trade_count: number;
+    }[]
+  >`
+    SELECT
+      decision,
+      COALESCE(SUM(pnl), 0)::float AS total_pnl,
+      COUNT(*)::int AS trade_count
+    FROM shadowposition
+    WHERE closed_at IS NOT NULL
+      AND opened_at >= NOW() - (${windowDays} || ' days')::interval
+      AND decision IN ('approved', 'rejected')
+    GROUP BY decision
+  `;
+
+  let approved_pnl = 0;
+  let approved_count = 0;
+  let rejected_pnl = 0;
+  let rejected_count = 0;
+
+  for (const row of rows) {
+    if (row.decision === "approved") {
+      approved_pnl = Number(row.total_pnl);
+      approved_count = Number(row.trade_count);
+    } else if (row.decision === "rejected") {
+      rejected_pnl = Number(row.total_pnl);
+      rejected_count = Number(row.trade_count);
+    }
+  }
+
+  return {
+    window_days: windowDays,
+    approved_pnl,
+    approved_count,
+    rejected_pnl,
+    rejected_count,
+  };
+}
+
+export async function listClosedShadowPositions(
+  limit = 200,
+): Promise<ShadowPosition[]> {
+  const sql = getSql();
+  return sql<ShadowPosition[]>`
+    SELECT
+      id, proposal_id, symbol, side, decision,
+      opened_at, opened_price::float AS opened_price,
+      closed_at, closed_price::float AS closed_price,
+      pnl::float AS pnl,
+      mark_price::float AS mark_price,
+      marked_at
+    FROM shadowposition
+    WHERE closed_at IS NOT NULL
+    ORDER BY closed_at DESC
+    LIMIT ${limit}
+  `;
+}
