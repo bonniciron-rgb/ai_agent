@@ -50,6 +50,12 @@ class Settings(BaseSettings):
     llm_daily_cost_alert_usd: float = 2.0
     run_mode: RunMode = RunMode.dry_run
 
+    # Tiered LLM routing (m18)
+    llm_tiered: bool = True  # set LLM_TIERED=false to revert to single-pass
+    llm_screening_model: str = "claude-haiku-4-5-20251001"
+    llm_decision_model: str = "claude-opus-4-7"
+    llm_shortlist_max: int = 5  # max tickers forwarded from screening → decision
+
     @property
     def t212_base_url(self) -> str:
         if self.t212_env is T212Env.live:

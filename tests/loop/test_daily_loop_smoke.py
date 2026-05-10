@@ -172,6 +172,10 @@ def test_daily_loop_persists_passing_proposal(watchlist_path, _db, monkeypatch) 
             cache_read_tokens=0,
             cache_write_tokens=0,
             stop_reason="end_turn",
+            # m16/m18 fields required by _save_proposals
+            model="claude-opus-4-7",
+            prompt_messages=[],
+            response_text="",
         )
 
     async def _no_digest(*args, **kwargs):

@@ -95,7 +95,8 @@ def test_end_turn_immediately_returns_empty_proposals() -> None:
             FakeResponse(content=[FakeTextBlock(text="No trades today.")], stop_reason="end_turn"),
         ]
     )
-    result = run_agent(watchlist=["AAPL"], toolbox=_simple_toolbox(), client=client)
+    # tiered=False preserves the original single-pass behaviour
+    result = run_agent(watchlist=["AAPL"], toolbox=_simple_toolbox(), client=client, tiered=False)
     assert isinstance(result, AgentResult)
     assert result.proposals == []
     assert result.iterations == 1
@@ -116,7 +117,7 @@ def test_single_tool_call_then_end_turn() -> None:
             ),
         ]
     )
-    result = run_agent(watchlist=["AAPL"], toolbox=_simple_toolbox(), client=client)
+    result = run_agent(watchlist=["AAPL"], toolbox=_simple_toolbox(), client=client, tiered=False)
     assert result.proposals == []
     assert result.iterations == 2
 
@@ -144,7 +145,7 @@ def test_propose_trade_captured() -> None:
             ),
         ]
     )
-    result = run_agent(watchlist=["AAPL"], toolbox=_simple_toolbox(), client=client)
+    result = run_agent(watchlist=["AAPL"], toolbox=_simple_toolbox(), client=client, tiered=False)
     assert len(result.proposals) == 1
     p = result.proposals[0]
     assert p.symbol == "AAPL"
@@ -170,7 +171,7 @@ def test_multiple_tool_calls_in_one_response() -> None:
             ),
         ]
     )
-    result = run_agent(watchlist=["MSFT"], toolbox=_simple_toolbox(), client=client)
+    result = run_agent(watchlist=["MSFT"], toolbox=_simple_toolbox(), client=client, tiered=False)
     assert result.iterations == 2
     assert result.proposals == []
 
@@ -192,7 +193,7 @@ def test_token_usage_accumulated() -> None:
             ),
         ]
     )
-    result = run_agent(watchlist=["AAPL"], toolbox=_simple_toolbox(), client=client)
+    result = run_agent(watchlist=["AAPL"], toolbox=_simple_toolbox(), client=client, tiered=False)
     assert result.input_tokens == 180
     assert result.output_tokens == 80
 
@@ -215,7 +216,9 @@ def test_max_iterations_guard() -> None:
             def create_message(self, **_kw):
                 return infinite_tool
 
-        result = run_agent(watchlist=["AAPL"], toolbox=_simple_toolbox(), client=LoopClient())
+        result = run_agent(
+            watchlist=["AAPL"], toolbox=_simple_toolbox(), client=LoopClient(), tiered=False
+        )
         assert result.iterations == 3
     finally:
         runner_mod.MAX_ITERATIONS = original
