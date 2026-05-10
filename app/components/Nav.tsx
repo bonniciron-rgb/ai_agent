@@ -38,6 +38,9 @@ export function Nav({ session }: NavProps) {
             <Link href="/simulator" className="hover:text-zinc-100">
               Simulator
             </Link>
+            <Link href="/llm-usage" className="hover:text-zinc-100">
+              Cost
+            </Link>
           </nav>
         </div>
         <div className="text-sm text-zinc-500">
