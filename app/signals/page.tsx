@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Nav } from "@/app/components/Nav";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth";
 import { listSignalChannels, type SignalChannel } from "@/lib/queries";
+import { bootstrapSignalChannelsFromYaml } from "@/lib/signals-bootstrap";
 import { SignalsClient } from "./SignalsClient";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +16,8 @@ export default async function SignalsPage() {
   let channels: SignalChannel[] = [];
   let fetchError: string | null = null;
   try {
+    // Seed from config/external_signals.yaml on first visit (idempotent).
+    await bootstrapSignalChannelsFromYaml();
     channels = await listSignalChannels();
   } catch (e: unknown) {
     fetchError = e instanceof Error ? e.message : String(e);
