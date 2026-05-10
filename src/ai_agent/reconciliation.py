@@ -93,9 +93,7 @@ def compare_positions(
             db_qty = db_pos.quantity
             t212_qty = t212_pos.quantity  # type: ignore[union-attr]
             abs_diff = abs(db_qty - t212_qty)
-            pct_diff = (
-                abs_diff / max(db_qty, t212_qty) if max(db_qty, t212_qty) else Decimal(0)
-            )
+            pct_diff = abs_diff / max(db_qty, t212_qty) if max(db_qty, t212_qty) else Decimal(0)
             if abs_diff > _POSITION_QTY_ABS_THRESHOLD or pct_diff > _POSITION_QTY_PCT_THRESHOLD:
                 drifts.append(
                     {

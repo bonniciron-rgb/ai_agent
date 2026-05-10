@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from sqlalchemy.engine import Engine
-from sqlmodel import Session, select
+from sqlmodel import Session
 
 from ai_agent.broker.models import OpenPosition, OrderResponse
 from ai_agent.db.engine import create_engine_from_url, init_schema
@@ -26,7 +26,6 @@ from ai_agent.reconciliation import (
     compare_positions,
     run_reconciliation,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -104,10 +103,6 @@ def _make_db_order(
 
 def test_compare_positions_no_drift() -> None:
     """Matching positions should produce no drifts."""
-    with Session(create_engine_from_url("sqlite+pysqlite:///:memory:")) as session:
-        eng = create_engine_from_url("sqlite+pysqlite:///:memory:")
-        init_schema(eng)
-
     db_positions = [
         Position(symbol="AAPL", quantity=Decimal("5"), avg_price=Decimal("170")),
         Position(symbol="MSFT", quantity=Decimal("10"), avg_price=Decimal("390")),
@@ -151,9 +146,7 @@ def test_compare_positions_quantity_mismatch() -> None:
 
 def test_compare_positions_trivial_quantity_difference_ignored() -> None:
     """Sub-threshold quantity difference (< 1 share AND < 0.1%) should not be flagged."""
-    db_positions = [
-        Position(symbol="AAPL", quantity=Decimal("100.00"), avg_price=Decimal("170"))
-    ]
+    db_positions = [Position(symbol="AAPL", quantity=Decimal("100.00"), avg_price=Decimal("170"))]
     t212_positions = [_make_t212_position("AAPL_US_EQ", "100.05")]  # 0.05 shares = 0.05%
     drifts = compare_positions(db_positions, t212_positions)
     assert drifts == []

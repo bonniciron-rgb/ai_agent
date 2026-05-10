@@ -9,13 +9,12 @@ from decimal import Decimal
 import httpx
 import pytest
 from sqlalchemy.engine import Engine
-from sqlmodel import Session, select
+from sqlmodel import Session
 
 from ai_agent.broker.order_executor import OrderExecutor, make_idempotency_key
 from ai_agent.broker.t212_client import T212Client
 from ai_agent.db.engine import create_engine_from_url, init_schema
 from ai_agent.db.models import Order, OrderSide, OrderStatus, OrderType, Proposal, ProposalStatus
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -205,7 +204,6 @@ def test_submit_after_rejected_retries_t212(engine: Engine) -> None:
         assert proposal is not None
         order = executor.submit_from_proposal(proposal, session)
         session.commit()
-        updated_id = order.id
         updated_status = order.status
         updated_broker_id = order.broker_order_id
 
