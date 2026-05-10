@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" fill="none">
+  <!--
+    Ethera Trading sigil - PLACEHOLDER REPRODUCTION.
+    Geometric approximation from the brand comp; replace this file with the
+    official SVG export when available.  All downstream icons are generated
+    from this asset at build time, so swap-in is a single-file change.
+  -->
+  <g stroke-linecap="square" stroke-linejoin="miter" stroke-width="14">
+    <!-- Hexagon outline (pointy-top) -->
+    <polygon
+      points="120,20 209,70 209,170 120,220 31,170 31,70"
+      stroke="#0E2138"
+    />
+    <!-- E spine: left vertical inside the hex -->
+    <line x1="74" y1="84" x2="74" y2="156" stroke="#0E2138" />
+    <!-- Top bar -->
+    <line x1="74" y1="84" x2="170" y2="84" stroke="#0E2138" />
+    <!-- Middle bar - navy half -->
+    <line x1="74" y1="120" x2="120" y2="120" stroke="#0E2138" />
+    <!-- Middle bar - teal accent -->
+    <line x1="120" y1="120" x2="180" y2="120" stroke="#1F6B82" />
+    <!-- Bottom bar -->
+    <line x1="74" y1="156" x2="170" y2="156" stroke="#0E2138" />
+  </g>
+</svg>

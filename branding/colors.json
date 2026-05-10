@@ -1,0 +1,7 @@
+{
+  "_comment": "Ethera Trading brand tokens. Source-of-truth for app theming, icon generation, and any future Tailwind config additions. Update here, regenerate downstream assets.",
+  "navy": "#0E2138",
+  "teal": "#1F6B82",
+  "cream": "#F2F0EC",
+  "appBackground": "#0A0E1A"
+}
