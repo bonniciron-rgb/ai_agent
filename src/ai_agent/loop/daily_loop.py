@@ -29,10 +29,16 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from ai_agent.agent.runner import run_agent
+from ai_agent.agent.runner import AgentResult, run_agent
 from ai_agent.agent.tools import Toolbox
 from ai_agent.db.engine import get_session, init_schema
-from ai_agent.db.models import OrderSide, Proposal, ProposalStatus
+from ai_agent.db.models import (
+    OrderSide,
+    Proposal,
+    ProposalReasoning,
+    ProposalStatus,
+    ShadowPosition,
+)
 from ai_agent.db.settings_store import is_trading_halted
 from ai_agent.loop.bar_store import bars_from_db, ingest_bars
 from ai_agent.loop.portfolio_snapshot import LivePortfolioSnapshot
@@ -167,10 +173,57 @@ def _build_toolbox(
 # ---------------------------------------------------------------------------
 
 
-def _save_proposals(proposals) -> list[Proposal]:
-    """Persist TradeProposal objects to DB; return saved Proposal ORM rows."""
+def _build_prompt_text(result: AgentResult) -> str:
+    """Serialise the full conversation to a plain-text audit trail."""
+    import json
+
+    model = getattr(result, "model", "unknown")
+    prompt_messages = getattr(result, "prompt_messages", [])
+    parts: list[str] = [f"[MODEL: {model}]", ""]
+    for msg in prompt_messages:
+        role = msg.get("role", "unknown").upper()
+        content = msg.get("content", "")
+        if isinstance(content, str):
+            parts.append(f"[{role}]\n{content}")
+        elif isinstance(content, list):
+            for block in content:
+                if hasattr(block, "type"):
+                    if block.type == "text":
+                        parts.append(f"[{role}]\n{block.text}")
+                    elif block.type == "tool_use":
+                        parts.append(
+                            f"[{role}/tool_use:{block.name}]\n"
+                            + json.dumps(block.input, default=str)
+                        )
+                    elif block.type == "tool_result":
+                        parts.append(f"[{role}/tool_result]\n{block.content}")
+                elif isinstance(block, dict):
+                    btype = block.get("type", "")
+                    if btype == "text":
+                        parts.append(f"[{role}]\n{block.get('text', '')}")
+                    elif btype == "tool_result":
+                        parts.append(
+                            f"[{role}/tool_result:{block.get('tool_use_id', '')}]\n"
+                            + str(block.get("content", ""))
+                        )
+    return "\n\n".join(parts)
+
+
+def _save_proposals(proposals, agent_result: AgentResult | None = None) -> list[Proposal]:
+    """Persist TradeProposal objects to DB; return saved Proposal ORM rows.
+
+    Also writes ProposalReasoning and ShadowPosition rows for every proposal.
+    """
     saved: list[Proposal] = []
     expires_at = datetime.now(UTC) + timedelta(hours=PROPOSAL_TTL_HOURS)
+
+    # Build reasoning audit text once (use getattr so SimpleNamespace fakes in tests still work)
+    prompt_text = _build_prompt_text(agent_result) if agent_result else ""
+    response_text = getattr(agent_result, "response_text", "") if agent_result else ""
+    model = getattr(agent_result, "model", "unknown") if agent_result else "unknown"
+    input_tokens = getattr(agent_result, "input_tokens", 0) if agent_result else 0
+    output_tokens = getattr(agent_result, "output_tokens", 0) if agent_result else 0
+
     with get_session() as session:
         for p in proposals:
             row = Proposal(
@@ -186,6 +239,28 @@ def _save_proposals(proposals) -> list[Proposal]:
             )
             session.add(row)
             session.flush()
+
+            # Write reasoning audit row
+            reasoning = ProposalReasoning(
+                proposal_id=row.id,
+                prompt_text=prompt_text,
+                response_text=response_text,
+                model=model,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+            )
+            session.add(reasoning)
+
+            # Write shadow position row (decision=None until user acts)
+            shadow = ShadowPosition(
+                proposal_id=row.id,
+                symbol=p.symbol,
+                side=str(p.side),
+                decision=None,
+                opened_price=float(p.limit_price),
+            )
+            session.add(shadow)
+
             saved.append(row)
         session.commit()
         for row in saved:
@@ -348,9 +423,13 @@ def run(
         logger.info("[dry_run] Would save %d proposals and send digest", len(passing))
         for p in passing:
             logger.info("  %s %s x%d @ %s", p.side, p.symbol, p.quantity, p.limit_price)
+        # Still write reasoning + shadow rows even in dry-run so we can audit
+        if passing:
+            _save_proposals(passing, agent_result=result)
+            logger.info("[dry_run] Wrote reasoning + shadow rows for %d proposals", len(passing))
         return
 
-    saved = _save_proposals(passing)
+    saved = _save_proposals(passing, agent_result=result)
     logger.info("Saved %d proposals to DB", len(saved))
 
     asyncio.run(_send_digest(saved, settings))

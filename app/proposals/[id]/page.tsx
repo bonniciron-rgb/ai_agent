@@ -7,8 +7,10 @@ import { buildSparkline, computeIndicators } from "@/lib/indicators";
 import {
   getOrderForProposal,
   getProposal,
+  getProposalReasoning,
   getRecentBars,
   type Bar,
+  type ProposalReasoning,
 } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
@@ -27,9 +29,10 @@ export default async function ProposalDetailPage({
   const proposal = await getProposal(id).catch(() => null);
   if (!proposal) notFound();
 
-  const [order, bars] = await Promise.all([
+  const [order, bars, reasoning] = await Promise.all([
     getOrderForProposal(id).catch(() => null),
     getRecentBars(proposal.symbol, 30).catch(() => [] as Bar[]),
+    getProposalReasoning(id).catch(() => null as ProposalReasoning | null),
   ]);
 
   const indicators = computeIndicators(bars);
@@ -105,6 +108,45 @@ export default async function ProposalDetailPage({
                 {proposal.rationale || "(no rationale recorded)"}
               </p>
             </div>
+
+            {reasoning ? (
+              <>
+                <div className="mt-6 rounded-lg border border-zinc-800 bg-zinc-900/30 p-5">
+                  <h2 className="text-sm font-medium uppercase tracking-wider text-zinc-500">
+                    Why Claude proposed this
+                  </h2>
+                  <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded bg-zinc-950 p-3 text-xs leading-5 text-zinc-300">
+                    {reasoning.response_text ||
+                      "(no assistant text — see full prompt below)"}
+                  </pre>
+                </div>
+
+                <div className="mt-6 rounded-lg border border-zinc-800 bg-zinc-900/30 p-5">
+                  <h2 className="text-sm font-medium uppercase tracking-wider text-zinc-500">
+                    Token cost
+                  </h2>
+                  <dl className="mt-3 grid grid-cols-2 gap-y-2 text-sm sm:grid-cols-4">
+                    <Fact label="Model" value={reasoning.model} />
+                    <Fact
+                      label="Input tokens"
+                      value={reasoning.input_tokens.toLocaleString()}
+                    />
+                    <Fact
+                      label="Output tokens"
+                      value={reasoning.output_tokens.toLocaleString()}
+                    />
+                    <Fact
+                      label="Est. cost"
+                      value={estimateCost(
+                        reasoning.model,
+                        reasoning.input_tokens,
+                        reasoning.output_tokens,
+                      )}
+                    />
+                  </dl>
+                </div>
+              </>
+            ) : null}
 
             <div className="mt-6 rounded-lg border border-zinc-800 bg-zinc-900/30 p-5">
               <h2 className="text-sm font-medium uppercase tracking-wider text-zinc-500">
@@ -198,6 +240,32 @@ export default async function ProposalDetailPage({
       </main>
     </>
   );
+}
+
+/** Estimate USD cost based on model pricing.
+ * Opus 4: $15/M input, $75/M output.
+ * Haiku 4: $1/M input, $5/M output.
+ * Sonnet 4.6 (default): $3/M input, $15/M output.
+ */
+function estimateCost(
+  model: string,
+  inputTokens: number,
+  outputTokens: number,
+): string {
+  let inputPricePerM = 3.0;
+  let outputPricePerM = 15.0;
+  const lower = model.toLowerCase();
+  if (lower.includes("opus")) {
+    inputPricePerM = 15.0;
+    outputPricePerM = 75.0;
+  } else if (lower.includes("haiku")) {
+    inputPricePerM = 1.0;
+    outputPricePerM = 5.0;
+  }
+  const cost =
+    (inputTokens / 1_000_000) * inputPricePerM +
+    (outputTokens / 1_000_000) * outputPricePerM;
+  return `$${cost.toFixed(4)}`;
 }
 
 function Fact({

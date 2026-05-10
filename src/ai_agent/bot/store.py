@@ -9,8 +9,10 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 
+from sqlmodel import select
+
 from ai_agent.db.engine import get_session
-from ai_agent.db.models import Proposal, ProposalStatus
+from ai_agent.db.models import Proposal, ProposalStatus, ShadowPosition
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +21,14 @@ _ACTION_TO_STATUS = {
     "reject": ProposalStatus.rejected,
     "defer": ProposalStatus.deferred,
     "edit": ProposalStatus.proposed,  # stays proposed, awaiting edit reply
+}
+
+# Map proposal action → shadow decision string
+_ACTION_TO_SHADOW = {
+    "approve": "approved",
+    "reject": "rejected",
+    "edit": "edited",
+    "defer": None,  # deferral doesn't close the shadow
 }
 
 
@@ -43,6 +53,20 @@ class DbDecisionStore:
             proposal.decided_at = datetime.now(UTC)
             proposal.decided_by = decided_by
             session.add(proposal)
+
+            # Flip the shadow position decision
+            shadow_decision = _ACTION_TO_SHADOW.get(action)
+            if shadow_decision is not None:
+                shadow_rows = session.exec(
+                    select(ShadowPosition).where(
+                        ShadowPosition.proposal_id == proposal_id,
+                        ShadowPosition.decision.is_(None),  # type: ignore[union-attr]
+                    )
+                ).all()
+                for shadow in shadow_rows:
+                    shadow.decision = shadow_decision
+                    session.add(shadow)
+
             session.commit()
             logger.info("Proposal #%d → %s by %s", proposal_id, status, decided_by)
 

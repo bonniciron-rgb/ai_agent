@@ -1,0 +1,45 @@
+name: shadow-mtm
+
+on:
+  schedule:
+    # 21:30 UTC Mon–Fri (after US market close; bars should be ingested by then)
+    - cron: "30 21 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "Override reference date (YYYY-MM-DD). Defaults to today UTC."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  mark-to-market:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[production]"
+
+      - name: Run shadow MTM
+        run: |
+          DATE_FLAG=""
+          if [ -n "${{ github.event.inputs.date }}" ]; then
+            DATE_FLAG="--date ${{ github.event.inputs.date }}"
+          fi
+          python scripts/shadow_mtm.py $DATE_FLAG
