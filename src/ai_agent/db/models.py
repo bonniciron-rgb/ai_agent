@@ -236,3 +236,23 @@ class WatchlistTicker(SQLModel, table=True):
     paused: bool = Field(default=False, index=True)
     added_at: datetime = Field(default_factory=_utcnow)
     updated_at: datetime = Field(default_factory=_utcnow)
+
+
+class MacroRegimeSnapshot(SQLModel, table=True):
+    """Daily classification of overall market regime (bull/bear/sideways/etc).
+
+    Computed from SPY + ^VIX bars by ai_agent.macro.regime_detector.
+    """
+
+    id: int | None = Field(default=None, primary_key=True)
+    as_of: date = Field(index=True, unique=True)
+    regime: str = Field(max_length=16, index=True)
+    spy_close: Decimal
+    spy_sma_50: Decimal
+    spy_sma_200: Decimal
+    spy_above_200sma: bool
+    spy_50_over_200sma: bool
+    vix_close: Decimal
+    vix_sma_20: Decimal | None = None
+    notes_json: str = Field(default="[]", max_length=1024)
+    created_at: datetime = Field(default_factory=_utcnow)
