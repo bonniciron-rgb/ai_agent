@@ -21,12 +21,16 @@ import sys
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from sqlmodel import Session, select
 
 from ai_agent.db.engine import get_engine, init_schema
 from ai_agent.db.models import LlmUsage, Proposal
 from ai_agent.db.settings_store import set_trading_halted
+
+if TYPE_CHECKING:
+    from ai_agent.digest.push_sender import PushPayload
 
 logger = logging.getLogger(__name__)
 
@@ -220,6 +224,44 @@ def format_cost_alert_html(digest: DigestData) -> str:
 # ---------------------------------------------------------------------------
 
 
+def format_digest_summary(digest: DigestData) -> PushPayload:
+    from ai_agent.digest.push_sender import PushPayload
+
+    n = digest.proposal_count
+    spend = f"${digest.total_cost_usd:.2f}"
+    if n == 0:
+        body = f"No proposals today. LLM spend: {spend}."
+    else:
+        body = f"{n} proposal{'s' if n != 1 else ''} ready. LLM spend: {spend}."
+    return PushPayload(
+        title="Ethera daily digest",
+        body=body,
+        url="/proposals",
+    )
+
+
+def format_cost_alert_summary(digest: DigestData) -> PushPayload:
+    from ai_agent.digest.push_sender import PushPayload
+
+    return PushPayload(
+        title="Ethera cost alert",
+        body=(
+            f"Daily LLM spend ${digest.total_cost_usd:.2f} exceeded threshold"
+            f" ${digest.cost_threshold:.2f}. Trading paused."
+        ),
+        url="/llm-usage",
+    )
+
+
+def _send_web_push_safe(payload: PushPayload) -> None:
+    try:
+        from ai_agent.digest.push_sender import send_to_all
+
+        send_to_all(payload)
+    except Exception as exc:
+        logger.warning("Web push delivery failed: %s", exc)
+
+
 def _send_telegram(message: str) -> None:
     """Send a Telegram message via Bot API.  Logs and continues on any failure."""
     token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
@@ -277,9 +319,11 @@ def run_daily_digest(
     if digest.cost_alert_triggered and not dry_run:
         set_trading_halted(True, updated_by="cost_alert")
         _send_telegram(format_cost_alert_html(digest))
+        _send_web_push_safe(format_cost_alert_summary(digest))
 
     if not dry_run:
         _send_telegram(format_digest_html(digest))
+        _send_web_push_safe(format_digest_summary(digest))
 
     return digest
 
