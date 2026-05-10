@@ -167,8 +167,6 @@ class Setting(SQLModel, table=True):
     updated_by: str | None = Field(default=None, max_length=64)
 
 
-
-
 class Reconciliation(SQLModel, table=True):
     """Record of each nightly reconciliation run comparing DB state with T212."""
 

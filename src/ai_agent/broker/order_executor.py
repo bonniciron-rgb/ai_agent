@@ -105,9 +105,7 @@ class OrderExecutor:
         )
 
         # --- Idempotency check ---
-        existing = session.exec(
-            select(Order).where(Order.idempotency_key == ikey)
-        ).first()
+        existing = session.exec(select(Order).where(Order.idempotency_key == ikey)).first()
 
         if existing is not None:
             if existing.status in _SUCCESS_STATUSES:
