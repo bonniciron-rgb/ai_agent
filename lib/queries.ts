@@ -228,6 +228,81 @@ export async function getRecentBars(
 }
 
 // ---------------------------------------------------------------------------
+// Simulator (OHLCV + proposals for a symbol/period)
+// ---------------------------------------------------------------------------
+
+export interface SimulatorBar {
+  trading_date: string; // YYYY-MM-DD
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export interface SimulatorProposal {
+  id: number;
+  created_date: string; // YYYY-MM-DD (date only, UTC)
+  symbol: string;
+  side: OrderSide;
+  limit_price: number;
+  stop_price: number | null;
+  status: ProposalStatus;
+  confidence: string;
+}
+
+export async function getSimulatorBars(
+  symbol: string,
+  days: number,
+): Promise<SimulatorBar[]> {
+  const sql = getSql();
+  const rows = await sql<SimulatorBar[]>`
+    SELECT
+      trading_date::text AS trading_date,
+      open::float AS open,
+      high::float AS high,
+      low::float AS low,
+      close::float AS close,
+      volume::int AS volume
+    FROM bar
+    WHERE symbol = ${symbol.toUpperCase()}
+      AND trading_date >= CURRENT_DATE - (${days} || ' days')::interval
+    ORDER BY trading_date ASC
+  `;
+  return rows;
+}
+
+export async function getSimulatorProposals(
+  symbol: string,
+  days: number,
+): Promise<SimulatorProposal[]> {
+  const sql = getSql();
+  return sql<SimulatorProposal[]>`
+    SELECT
+      id,
+      (created_at AT TIME ZONE 'UTC')::date::text AS created_date,
+      symbol,
+      side,
+      limit_price::float AS limit_price,
+      stop_price::float AS stop_price,
+      status,
+      confidence
+    FROM proposal
+    WHERE symbol = ${symbol.toUpperCase()}
+      AND created_at >= NOW() - (${days} || ' days')::interval
+    ORDER BY created_at ASC
+  `;
+}
+
+export async function getSimulatorSymbols(): Promise<string[]> {
+  const sql = getSql();
+  const rows = await sql<{ symbol: string }[]>`
+    SELECT DISTINCT symbol FROM bar ORDER BY symbol ASC
+  `;
+  return rows.map((r) => r.symbol);
+}
+
+// ---------------------------------------------------------------------------
 // Signal channels
 // ---------------------------------------------------------------------------
 

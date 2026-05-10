@@ -35,6 +35,9 @@ export function Nav({ session }: NavProps) {
             <Link href="/shadow" className="hover:text-zinc-100">
               Shadow
             </Link>
+            <Link href="/simulator" className="hover:text-zinc-100">
+              Simulator
+            </Link>
           </nav>
         </div>
         <div className="text-sm text-zinc-500">
