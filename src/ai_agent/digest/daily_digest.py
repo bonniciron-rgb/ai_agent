@@ -84,18 +84,18 @@ def aggregate_digest(
         # --- Proposals ---
         proposals = list(
             session.exec(
-                select(Proposal).where(
+                select(Proposal)
+                .where(
                     Proposal.created_at >= day_start,
                     Proposal.created_at < day_end,
-                ).order_by(Proposal.created_at)
+                )
+                .order_by(Proposal.created_at)
             ).all()
         )
 
         # --- LLM Usage ---
         usages = list(
-            session.exec(
-                select(LlmUsage).where(LlmUsage.occurred_on == digest_date)
-            ).all()
+            session.exec(select(LlmUsage).where(LlmUsage.occurred_on == digest_date)).all()
         )
 
     # Compute proposal aggregates
@@ -138,9 +138,7 @@ def aggregate_digest(
         total_input += u.input_tokens
 
     denominator = total_cache_read + total_input
-    cache_hit_rate: float | None = (
-        total_cache_read / denominator if denominator > 0 else None
-    )
+    cache_hit_rate: float | None = total_cache_read / denominator if denominator > 0 else None
 
     cost_alert_triggered = total_cost_usd >= threshold
 

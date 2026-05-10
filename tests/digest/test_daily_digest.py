@@ -11,12 +11,9 @@ from unittest.mock import MagicMock
 import pytest
 from sqlmodel import Session, select
 
-from ai_agent.db.engine import create_engine_from_url, init_schema
 from ai_agent.db.models import LlmUsage, Proposal, ProposalStatus, Setting
 from ai_agent.digest.daily_digest import (
-    DigestData,
     aggregate_digest,
-    format_cost_alert_html,
     format_digest_html,
     run_daily_digest,
 )
@@ -129,7 +126,7 @@ def test_aggregate_with_proposals_and_usage(in_memory_engine) -> None:
 
     with Session(in_memory_engine) as session:
         # Two proposals on digest date
-        p1 = _make_proposal(
+        _make_proposal(
             session,
             symbol="AAPL",
             side="buy",

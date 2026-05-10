@@ -2,6 +2,7 @@
 
 Delegates to ``ai_agent.digest.daily_digest`` which contains all the logic.
 """
+
 import sys
 
 from ai_agent.digest.daily_digest import main
