@@ -20,6 +20,7 @@ interface RegimeRow {
 interface ApiResponse {
   latest: RegimeRow | null;
   history: RegimeRow[];
+  schemaPending?: boolean;
 }
 
 const REGIME_COLORS: Record<string, { badge: string; cell: string }> = {
@@ -90,6 +91,17 @@ export function RegimeClient() {
   }
 
   if (!data?.latest) {
+    if (data?.schemaPending) {
+      return (
+        <div className="mt-6 rounded-lg border border-amber-900 bg-amber-950/40 p-6 text-sm text-amber-200">
+          <p className="font-medium">First-run pending</p>
+          <p className="mt-1 text-amber-300/80">
+            The <code className="font-mono">macroregimesnapshot</code> table will be created
+            automatically the next time the macro-regime cron runs (22:30 UTC weekdays).
+          </p>
+        </div>
+      );
+    }
     return (
       <div className="mt-6 rounded-lg border border-zinc-800 p-6 text-sm text-zinc-500">
         No regime data yet -- the daily cron will populate this after the next 22:30 UTC run.

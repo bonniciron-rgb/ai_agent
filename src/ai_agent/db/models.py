@@ -256,3 +256,30 @@ class MacroRegimeSnapshot(SQLModel, table=True):
     vix_sma_20: Decimal | None = None
     notes_json: str = Field(default="[]", max_length=1024)
     created_at: datetime = Field(default_factory=_utcnow)
+
+
+class SignalBacktest(SQLModel, table=True):
+    """Persisted backtest result for a (signal_name, version, period) tuple.
+
+    Written by ai_agent.signals.runner.save_backtest_result.
+    Acts as the historical record of how each candidate signal scored,
+    used by the promotion gate (backtest >= baseline AND >= 2 weeks shadow >= baseline).
+    """
+
+    id: int | None = Field(default=None, primary_key=True)
+    signal_name: str = Field(index=True, max_length=64)
+    signal_version: str = Field(max_length=32)
+    period_start: date
+    period_end: date
+    symbols_json: str  # JSON-encoded list[str]
+    benchmark_symbol: str = Field(max_length=16)
+    sharpe: float | None = None
+    cagr: float | None = None
+    max_drawdown: float | None = None
+    win_rate: float | None = None
+    alpha: float | None = None  # signal CAGR minus benchmark CAGR
+    benchmark_sharpe: float | None = None
+    benchmark_cagr: float | None = None
+    trade_count: int = 0
+    notes: str | None = None
+    created_at: datetime = Field(default_factory=_utcnow)

@@ -59,6 +59,9 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ rows, days });
   } catch (err) {
+    if ((err as { code?: string })?.code === "42P01") {
+      return NextResponse.json({ rows: [], days, schemaPending: true });
+    }
     console.error("llm-usage query failed:", err);
     return NextResponse.json({ error: "Database error" }, { status: 500 });
   }
