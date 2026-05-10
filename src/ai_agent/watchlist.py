@@ -43,6 +43,17 @@ def load_watchlist(path: str | Path) -> Watchlist:
     return Watchlist.model_validate(raw)
 
 
+def load_watchlist_from_db(yaml_fallback_path: str | Path | None = None) -> Watchlist:
+    """Load watchlist from DB.  If DB is empty and a yaml fallback is provided,
+    bootstrap from yaml first.
+    """
+    from ai_agent.db.watchlist_store import bootstrap_from_yaml, to_watchlist
+
+    if yaml_fallback_path is not None:
+        bootstrap_from_yaml(yaml_fallback_path)
+    return to_watchlist()
+
+
 def merge_unique(*lists: Iterable[str]) -> list[str]:
     seen: set[str] = set()
     out: list[str] = []

@@ -220,3 +220,19 @@ class ShadowPosition(SQLModel, table=True):
     pnl: float | None = None  # computed when closed
     mark_price: float | None = None  # last mark-to-market close
     marked_at: datetime | None = None
+
+
+class WatchlistTicker(SQLModel, table=True):
+    """DB-backed watchlist of tickers the agent screens each day.
+
+    Bootstrapped from config/watchlist.yaml on first read.  Editable from /watchlist UI.
+    """
+
+    id: int | None = Field(default=None, primary_key=True)
+    symbol: str = Field(index=True, unique=True, max_length=16)
+    sector: str | None = Field(default=None, max_length=32)
+    notes: str | None = None
+    tags_json: str = Field(default="[]", max_length=512)  # JSON-encoded list[str]
+    paused: bool = Field(default=False, index=True)
+    added_at: datetime = Field(default_factory=_utcnow)
+    updated_at: datetime = Field(default_factory=_utcnow)
