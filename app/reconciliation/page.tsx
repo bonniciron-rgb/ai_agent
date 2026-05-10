@@ -57,6 +57,7 @@ export default function ReconciliationPage() {
   const [rows, setRows] = useState<ReconciliationRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [setupRequired, setSetupRequired] = useState(false);
   const [expanded, setExpanded] = useState<number | null>(null);
 
   useEffect(() => {
@@ -65,8 +66,12 @@ export default function ReconciliationPage() {
         if (!r.ok) return r.json().then((d) => Promise.reject(d.error ?? r.statusText));
         return r.json();
       })
-      .then((data: ReconciliationRow[]) => {
-        setRows(data);
+      .then((data) => {
+        if (data && "setup_required" in data) {
+          setSetupRequired(true);
+        } else {
+          setRows(data as ReconciliationRow[]);
+        }
         setLoading(false);
       })
       .catch((err) => {
@@ -93,13 +98,24 @@ export default function ReconciliationPage() {
         </div>
       )}
 
-      {!loading && !error && rows.length === 0 && (
+      {setupRequired && (
+        <div className="mt-6 rounded-lg border border-amber-800 bg-amber-950/40 p-4 text-sm text-amber-200">
+          <p className="font-medium">Database table not initialised</p>
+          <p className="mt-1 text-amber-300/80">
+            The <code className="font-mono">reconciliation</code> table does not exist yet.
+            Go to <strong>GitHub → Actions → init-db → Run workflow</strong> to create it,
+            then reload this page.
+          </p>
+        </div>
+      )}
+
+      {!loading && !error && !setupRequired && rows.length === 0 && (
         <div className="mt-6 rounded-lg border border-zinc-800 p-6 text-sm text-zinc-500">
           No reconciliation runs yet. The nightly job runs at 21:00 UTC on weekdays.
         </div>
       )}
 
-      {!loading && !error && rows.length > 0 && (
+      {!loading && !error && !setupRequired && rows.length > 0 && (
         <div className="mt-6 overflow-hidden rounded-lg border border-zinc-800">
           <table className="w-full text-sm">
             <thead className="bg-zinc-900/50 text-xs uppercase tracking-wider text-zinc-500">
