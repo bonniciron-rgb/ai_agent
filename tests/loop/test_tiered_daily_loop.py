@@ -14,14 +14,11 @@ from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
-from sqlmodel import Session, select
 
 from ai_agent.data.base import BarPoint, BarSeries
 from ai_agent.db.engine import create_engine_from_url, init_schema
-from ai_agent.db.models import Bar
 from ai_agent.loop import daily_loop as dl
 from ai_agent.loop.daily_loop import run
-
 
 # ---------------------------------------------------------------------------
 # In-memory DB
@@ -208,10 +205,8 @@ def test_daily_loop_tiered_empty_shortlist_no_proposals(watchlist_path, monkeypa
 def _make_patched_run_agent(recording_client):
     """Return a run_agent replacement that passes the recording_client in."""
     from ai_agent.agent import runner as runner_mod
-    from ai_agent.settings import get_settings
 
     def patched_run_agent(watchlist, toolbox, *, client=None, api_key=None, **kwargs):
-        settings = get_settings()
         return runner_mod.run_agent(
             watchlist,
             toolbox,

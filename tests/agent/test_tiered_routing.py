@@ -13,16 +13,12 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from decimal import Decimal
-from types import SimpleNamespace
 from typing import Any
 
-import pytest
-
 from ai_agent.agent.proposals import TradeProposal
-from ai_agent.agent.runner import AgentResult, run_agent
+from ai_agent.agent.runner import run_agent
 from ai_agent.agent.tools import Toolbox
 from ai_agent.db.models import OrderSide
-
 
 # ---------------------------------------------------------------------------
 # Shared fake objects
@@ -147,8 +143,7 @@ def test_shortlist_of_3_decision_pass_uses_correct_symbols() -> None:
     """Stage 2 receives only the 3 shortlisted symbols in its user message."""
     shortlist_symbols = ["AAPL", "MSFT", "NVDA"]
     shortlist_payload = [
-        {"symbol": s, "rationale": f"strong momentum in {s}"}
-        for s in shortlist_symbols
+        {"symbol": s, "rationale": f"strong momentum in {s}"} for s in shortlist_symbols
     ]
 
     propose_input = {
@@ -165,9 +160,7 @@ def test_shortlist_of_3_decision_pass_uses_correct_symbols() -> None:
         responses=[
             _screening_response(shortlist_payload),  # Stage 1
             FakeResponse(
-                content=[
-                    FakeToolUseBlock(name="propose_trade", id="tu_1", input=propose_input)
-                ],
+                content=[FakeToolUseBlock(name="propose_trade", id="tu_1", input=propose_input)],
                 stop_reason="tool_use",
             ),  # Stage 2 iteration 1
             _decision_end_turn(),  # Stage 2 iteration 2
@@ -209,8 +202,7 @@ def test_shortlist_max_is_enforced() -> None:
     """LLM_SHORTLIST_MAX caps the shortlist even if screening returns more."""
     # Screening returns 5 symbols but max is 3
     shortlist_payload = [
-        {"symbol": s, "rationale": "conviction"}
-        for s in ["AAPL", "MSFT", "NVDA", "GOOG", "AMZN"]
+        {"symbol": s, "rationale": "conviction"} for s in ["AAPL", "MSFT", "NVDA", "GOOG", "AMZN"]
     ]
 
     client = RecordingClient(
@@ -220,7 +212,7 @@ def test_shortlist_max_is_enforced() -> None:
         ]
     )
 
-    result = run_agent(
+    run_agent(
         watchlist=["AAPL", "MSFT", "NVDA", "GOOG", "AMZN"],
         toolbox=_simple_toolbox(),
         client=client,
@@ -354,12 +346,7 @@ def test_cost_calculation_opus_with_cache_tokens() -> None:
     # Output:        1000 * 75 / 1_000_000  = 0.075
     # Cache write:   5000 * 15 * 1.25 / 1_000_000 = 0.09375
     # Cache read:    20000 * 15 * 0.10 / 1_000_000 = 0.03
-    expected = (
-        Decimal("0.15")
-        + Decimal("0.075")
-        + Decimal("0.09375")
-        + Decimal("0.03")
-    )
+    expected = Decimal("0.15") + Decimal("0.075") + Decimal("0.09375") + Decimal("0.03")
     assert abs(cost - expected) < Decimal("1e-6"), f"Expected ~{expected}, got {cost}"
 
 
@@ -410,12 +397,16 @@ def test_single_pass_mode_skips_screening() -> None:
 def test_token_accumulation_tiered() -> None:
     """Total token counts are the sum of screening + decision tokens."""
     screening_usage = FakeUsage(
-        input_tokens=100, output_tokens=50,
-        cache_creation_input_tokens=20, cache_read_input_tokens=10,
+        input_tokens=100,
+        output_tokens=50,
+        cache_creation_input_tokens=20,
+        cache_read_input_tokens=10,
     )
     decision_usage = FakeUsage(
-        input_tokens=500, output_tokens=300,
-        cache_creation_input_tokens=0, cache_read_input_tokens=80,
+        input_tokens=500,
+        output_tokens=300,
+        cache_creation_input_tokens=0,
+        cache_read_input_tokens=80,
     )
 
     shortlist_payload = [{"symbol": "AAPL", "rationale": "strong"}]
@@ -441,7 +432,7 @@ def test_token_accumulation_tiered() -> None:
         decision_model="claude-opus-4-7",
     )
 
-    assert result.input_tokens == 600   # 100 + 500
+    assert result.input_tokens == 600  # 100 + 500
     assert result.output_tokens == 350  # 50 + 300
     assert result.screening_input_tokens == 100
     assert result.screening_cache_creation_tokens == 20

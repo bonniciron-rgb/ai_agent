@@ -3,8 +3,8 @@
 Pricing (per million tokens, as of May 2026):
   Haiku 4.5   — input $1.00,  output $5.00
   Opus  4.7   — input $15.00, output $75.00
-  Cache write — 1.25× input price
-  Cache read  — 0.10× input price
+  Cache write — 1.25x input price
+  Cache read  — 0.10x input price
 """
 
 from __future__ import annotations
@@ -67,9 +67,9 @@ def calculate_cost_usd(
     output_tokens:
         Output (completion) tokens.
     cache_creation_tokens:
-        Tokens written to the cache (charged at 1.25× input price).
+        Tokens written to the cache (charged at 1.25x input price).
     cache_read_tokens:
-        Tokens read from the cache (charged at 0.10× input price).
+        Tokens read from the cache (charged at 0.10x input price).
     """
     input_price, output_price = _get_prices(model)
 

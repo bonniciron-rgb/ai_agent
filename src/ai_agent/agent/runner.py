@@ -132,12 +132,12 @@ class _AnthropicAdapter:
         tools: list[dict],
         messages: list[dict],
     ) -> Any:
-        kwargs: dict[str, Any] = dict(
-            model=model,
-            max_tokens=max_tokens,
-            system=system,
-            messages=messages,
-        )
+        kwargs: dict[str, Any] = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "system": system,
+            "messages": messages,
+        }
         if tools:
             kwargs["tools"] = tools
         return self._client.messages.create(**kwargs)
