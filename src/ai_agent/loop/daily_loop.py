@@ -5,7 +5,7 @@ Called once per trading day at ~06:30 UTC (before US pre-market open).
 Steps
 -----
 1. Init DB schema (idempotent).
-2. Load watchlist from ``config/watchlist.yaml`` (or ``$WATCHLIST_PATH``).
+2. Load DB-backed watchlist (bootstrapped from yaml).
 3. Check the DB-backed halt flag (toggled by ``/halt`` Telegram command).
 4. Ingest fresh OHLCV bars for every watchlist symbol (yfinance + Stooq fallback).
 5. Build T212 client + LivePortfolioSnapshot.
@@ -44,7 +44,7 @@ from ai_agent.loop.bar_store import bars_from_db, ingest_bars
 from ai_agent.loop.portfolio_snapshot import LivePortfolioSnapshot
 from ai_agent.risk.rails import RiskChecker
 from ai_agent.settings import get_settings
-from ai_agent.watchlist import load_watchlist
+from ai_agent.watchlist import load_watchlist_from_db
 
 logger = logging.getLogger(__name__)
 
@@ -333,10 +333,7 @@ def run(
     init_schema()
 
     # 2. Watchlist
-    if not WATCHLIST_PATH.exists():
-        logger.error("Watchlist not found: %s", WATCHLIST_PATH)
-        sys.exit(1)
-    watchlist = load_watchlist(WATCHLIST_PATH)
+    watchlist = load_watchlist_from_db(yaml_fallback_path=WATCHLIST_PATH)
     if not watchlist.symbols:
         logger.warning("Watchlist is empty — nothing to analyse")
         return
