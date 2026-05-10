@@ -178,7 +178,6 @@ class Reconciliation(SQLModel, table=True):
     details: str | None = None  # JSON dump of mismatches for forensic review
 
 
-
 class ProposalReasoning(SQLModel, table=True):
     """Full LLM prompt + response captured for every proposal the agent emits.
 
