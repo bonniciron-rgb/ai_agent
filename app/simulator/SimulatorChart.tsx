@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { SimulatorBar, SimulatorProposal } from "@/lib/queries";
+import type { Time, SeriesMarker } from "lightweight-charts";
 
 // ─── Simulation engine ────────────────────────────────────────────────────
 
@@ -173,7 +174,7 @@ export default function SimulatorChart({ bars, proposals, initialCapital }: Prop
 
       candles.setData(
         bars.map((b) => ({
-          time: b.trading_date as lc.Time,
+          time: b.trading_date as Time,
           open: b.open,
           high: b.high,
           low: b.low,
@@ -183,10 +184,10 @@ export default function SimulatorChart({ bars, proposals, initialCapital }: Prop
 
       // Filter proposal markers to dates that exist in bars
       const barDates = new Set(bars.map((b) => b.trading_date));
-      const markers: lc.SeriesMarker<lc.Time>[] = proposals
+      const markers: SeriesMarker<Time>[] = proposals
         .filter((p) => barDates.has(p.created_date))
         .map((p) => ({
-          time: p.created_date as lc.Time,
+          time: p.created_date as Time,
           position: p.side === "buy" ? "belowBar" : "aboveBar",
           color: markerColor(p.status, p.side),
           shape: p.side === "buy" ? "arrowUp" : "arrowDown",
@@ -194,7 +195,8 @@ export default function SimulatorChart({ bars, proposals, initialCapital }: Prop
           size: 1,
         }));
 
-      candles.setMarkers(markers);
+      // v5 API: markers are a separate primitive, not a series method
+      lc.createSeriesMarkers(candles, markers);
       priceChart.timeScale().fitContent();
 
       // ── Equity curve chart ────────────────────────────────────────────
@@ -210,7 +212,7 @@ export default function SimulatorChart({ bars, proposals, initialCapital }: Prop
       });
 
       line.setData(
-        equityCurve.map((e) => ({ time: e.time as lc.Time, value: e.value })),
+        equityCurve.map((e) => ({ time: e.time as Time, value: e.value })),
       );
       equityChart.timeScale().fitContent();
 
