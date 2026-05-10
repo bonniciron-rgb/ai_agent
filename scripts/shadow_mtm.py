@@ -47,9 +47,7 @@ def _get_close_for_symbol(session: Session, symbol: str, ref_date: date) -> floa
     return float(row.close)
 
 
-def _get_trading_days_between(
-    session: Session, symbol: str, start: datetime, end: datetime
-) -> int:
+def _get_trading_days_between(session: Session, symbol: str, start: datetime, end: datetime) -> int:
     """Count bar rows for *symbol* between *start* and *end* (inclusive)."""
     start_date = start.date()
     end_date = end.date()
@@ -130,17 +128,17 @@ def run_mtm(ref_date: date | None = None) -> None:
             # Check SL crossing
             sl_crossed = False
             tp_crossed = False
-            if stop_price is not None:
-                if shadow.side == "buy" and close_price <= stop_price:
-                    sl_crossed = True
-                elif shadow.side == "sell" and close_price >= stop_price:
-                    sl_crossed = True
+            if stop_price is not None and (
+                (shadow.side == "buy" and close_price <= stop_price)
+                or (shadow.side == "sell" and close_price >= stop_price)
+            ):
+                sl_crossed = True
 
-            if take_profit is not None:
-                if shadow.side == "buy" and close_price >= take_profit:
-                    tp_crossed = True
-                elif shadow.side == "sell" and close_price <= take_profit:
-                    tp_crossed = True
+            if take_profit is not None and (
+                (shadow.side == "buy" and close_price >= take_profit)
+                or (shadow.side == "sell" and close_price <= take_profit)
+            ):
+                tp_crossed = True
 
             # Check 5-trading-day expiry: count bars between open date and ref_date
             ref_datetime = datetime(ref_date.year, ref_date.month, ref_date.day, tzinfo=UTC)

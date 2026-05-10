@@ -29,8 +29,6 @@ from ai_agent.db.models import (
     ShadowPosition,
 )
 from ai_agent.loop import daily_loop as dl
-from ai_agent.loop.daily_loop import _save_proposals
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -105,9 +103,7 @@ def test_proposal_reasoning_round_trip(engine, base_proposal) -> None:
     # Read back
     with Session(engine) as s:
         fetched = s.exec(
-            select(ProposalReasoning).where(
-                ProposalReasoning.proposal_id == base_proposal.id
-            )
+            select(ProposalReasoning).where(ProposalReasoning.proposal_id == base_proposal.id)
         ).first()
         assert fetched is not None
         assert fetched.prompt_text == "This is the prompt"
@@ -197,9 +193,7 @@ def test_dry_run_writes_reasoning_and_shadow(engine, tmp_path, monkeypatch) -> N
     """dry-run=True still writes ProposalReasoning + ShadowPosition rows."""
     # Create a minimal watchlist
     wl = tmp_path / "watchlist.yaml"
-    wl.write_text(
-        "entries:\n  - symbol: AAPL\n    sector: technology\n"
-    )
+    wl.write_text("entries:\n  - symbol: AAPL\n    sector: technology\n")
     monkeypatch.setattr(dl, "WATCHLIST_PATH", wl)
 
     # Fake the agent to return one proposal
