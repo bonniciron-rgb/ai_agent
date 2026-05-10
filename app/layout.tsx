@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { RegisterServiceWorker } from "./components/RegisterServiceWorker";
 import { InstallPrompt } from "./components/InstallPrompt";
+import { PushSubscribeButton } from "./components/PushSubscribeButton";
 
 export const metadata: Metadata = {
   title: "AI Trading Agent",
@@ -49,6 +50,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {children}
         <RegisterServiceWorker />
         <InstallPrompt />
+        <PushSubscribeButton />
       </body>
     </html>
   );

@@ -283,3 +283,20 @@ class SignalBacktest(SQLModel, table=True):
     trade_count: int = 0
     notes: str | None = None
     created_at: datetime = Field(default_factory=_utcnow)
+
+
+class PushSubscription(SQLModel, table=True):
+    """Web Push subscription registered from a browser / installed PWA.
+
+    One row per device endpoint.  Subscriptions are global (not per-user) to
+    mirror the single-owner Telegram pattern; any installed device gets the
+    daily digest push.
+    """
+
+    id: int | None = Field(default=None, primary_key=True)
+    endpoint: str = Field(unique=True, max_length=512, index=True)
+    auth_key: str = Field(max_length=128)
+    p256dh_key: str = Field(max_length=128)
+    user_agent: str | None = Field(default=None, max_length=256)
+    created_at: datetime = Field(default_factory=_utcnow)
+    last_used_at: datetime | None = None
