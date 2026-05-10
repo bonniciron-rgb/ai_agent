@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
 import type { SessionPayload } from "@/lib/auth";
 
@@ -5,7 +8,22 @@ interface NavProps {
   session: SessionPayload;
 }
 
+const NAV_LINKS = [
+  { href: "/", label: "Dashboard" },
+  { href: "/proposals", label: "Proposals" },
+  { href: "/orders", label: "Orders" },
+  { href: "/watchlist", label: "Watchlist" },
+  { href: "/signals", label: "Signals" },
+  { href: "/reconciliation", label: "Reconciliation" },
+  { href: "/shadow", label: "Shadow" },
+  { href: "/simulator", label: "Simulator" },
+  { href: "/llm-usage", label: "Cost" },
+  { href: "/regime", label: "Regime" },
+];
+
 export function Nav({ session }: NavProps) {
+  const [menuOpen, setMenuOpen] = useState(false);
+
   return (
     <header className="border-b border-zinc-800 bg-zinc-950/70 backdrop-blur">
       <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
@@ -13,49 +31,77 @@ export function Nav({ session }: NavProps) {
           <Link href="/" className="font-semibold tracking-tight">
             AI Trading Agent
           </Link>
-          <nav className="flex items-center gap-4 text-sm text-zinc-400">
-            <Link href="/" className="hover:text-zinc-100">
-              Dashboard
-            </Link>
-            <Link href="/proposals" className="hover:text-zinc-100">
-              Proposals
-            </Link>
-            <Link href="/orders" className="hover:text-zinc-100">
-              Orders
-            </Link>
-            <Link href="/watchlist" className="hover:text-zinc-100">
-              Watchlist
-            </Link>
-            <Link href="/signals" className="hover:text-zinc-100">
-              Signals
-            </Link>
-            <Link href="/reconciliation" className="hover:text-zinc-100">
-              Reconciliation
-            </Link>
-            <Link href="/shadow" className="hover:text-zinc-100">
-              Shadow
-            </Link>
-            <Link href="/simulator" className="hover:text-zinc-100">
-              Simulator
-            </Link>
-            <Link href="/llm-usage" className="hover:text-zinc-100">
-              Cost
-            </Link>
-            <Link href="/regime" className="hover:text-zinc-100">
-              Regime
-            </Link>
+
+          {/* Desktop nav */}
+          <nav className="hidden items-center gap-4 text-sm text-zinc-400 sm:flex">
+            {NAV_LINKS.map((link) => (
+              <Link key={link.href} href={link.href} className="hover:text-zinc-100">
+                {link.label}
+              </Link>
+            ))}
           </nav>
         </div>
-        <div className="text-sm text-zinc-500">
-          {session.username ? `@${session.username}` : `user ${session.uid}`}
+
+        <div className="flex items-center gap-3">
+          <span className="hidden text-sm text-zinc-500 sm:inline">
+            {session.username ? `@${session.username}` : `user ${session.uid}`}
+          </span>
           <a
             href="/api/auth/logout"
-            className="ml-3 text-zinc-600 hover:text-zinc-300"
+            className="hidden text-sm text-zinc-600 hover:text-zinc-300 sm:inline"
           >
             Sign out
           </a>
+
+          {/* Mobile menu button */}
+          <button
+            className="rounded p-1 text-zinc-400 hover:text-zinc-100 sm:hidden"
+            onClick={() => setMenuOpen((v) => !v)}
+            aria-label="Menu"
+            aria-expanded={menuOpen}
+          >
+            {menuOpen ? (
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <line x1="4" y1="4" x2="16" y2="16" />
+                <line x1="16" y1="4" x2="4" y2="16" />
+              </svg>
+            ) : (
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <line x1="3" y1="6" x2="17" y2="6" />
+                <line x1="3" y1="10" x2="17" y2="10" />
+                <line x1="3" y1="14" x2="17" y2="14" />
+              </svg>
+            )}
+          </button>
         </div>
       </div>
+
+      {/* Mobile drawer */}
+      {menuOpen && (
+        <nav className="border-t border-zinc-800 px-6 py-3 sm:hidden">
+          <div className="flex flex-col gap-1">
+            {NAV_LINKS.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="rounded px-2 py-2 text-sm text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100"
+                onClick={() => setMenuOpen(false)}
+              >
+                {link.label}
+              </Link>
+            ))}
+          </div>
+          <div className="mt-3 border-t border-zinc-800 pt-3 text-sm text-zinc-500">
+            <span>{session.username ? `@${session.username}` : `user ${session.uid}`}</span>
+            <a
+              href="/api/auth/logout"
+              className="ml-3 text-zinc-600 hover:text-zinc-300"
+            >
+              Sign out
+            </a>
+          </div>
+        </nav>
+      )}
     </header>
   );
 }

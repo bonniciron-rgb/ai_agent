@@ -12,6 +12,7 @@ import {
   type Bar,
   type ProposalReasoning,
 } from "@/lib/queries";
+import { ApprovalActions } from "./ApprovalActions";
 
 export const dynamic = "force-dynamic";
 
@@ -63,7 +64,18 @@ export default async function ProposalDetailPage({
 
         <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
           <section className="lg:col-span-2">
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-5">
+            <ApprovalActions
+              proposalId={proposal.id!}
+              symbol={proposal.symbol}
+              side={proposal.side}
+              quantity={String(proposal.quantity)}
+              limitPrice={String(proposal.limit_price)}
+              currentStatus={proposal.status}
+              decidedAt={proposal.decided_at ? String(proposal.decided_at) : null}
+              decidedBy={proposal.decided_by ?? null}
+            />
+
+            <div className="mt-6 rounded-lg border border-zinc-800 bg-zinc-900/30 p-5">
               <div className="flex items-baseline justify-between">
                 <div>
                   <p className="font-mono text-2xl">{proposal.symbol}</p>
