@@ -96,6 +96,7 @@ class LlmStrategy:
             watchlist=[self._symbol],
             toolbox=toolbox,
             client=self._client,
+            tiered=False,  # single-symbol backtest; screening adds no value
         )
         self._last_result = result
 
