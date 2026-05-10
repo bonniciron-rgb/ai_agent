@@ -113,18 +113,21 @@ export default function UsageClient() {
   const [rows, setRows] = useState<LlmUsageRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [schemaPending, setSchemaPending] = useState(false);
   const requestId = useRef(0);
 
   useEffect(() => {
     const id = ++requestId.current;
     setLoading(true);
     setError(null);
+    setSchemaPending(false);
     fetch(`/api/llm-usage?days=${days}`)
       .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
       .then(({ ok, d }) => {
         if (id !== requestId.current) return;
         if (!ok) throw new Error(d.error ?? "Failed to load");
         setRows(d.rows);
+        setSchemaPending(Boolean(d.schemaPending));
         setLoading(false);
       })
       .catch((err) => {
@@ -173,7 +176,17 @@ export default function UsageClient() {
         <p className="mt-8 text-sm text-zinc-500">Loading…</p>
       )}
 
-      {!loading && !error && rows.length === 0 && (
+      {!loading && !error && rows.length === 0 && schemaPending && (
+        <div className="mt-6 rounded-lg border border-amber-900 bg-amber-950/40 p-6 text-sm text-amber-200">
+          <p className="font-medium">First-run pending</p>
+          <p className="mt-1 text-amber-300/80">
+            The <code className="font-mono">llmusage</code> table will be created
+            automatically the next time the daily agent loop runs (06:30 UTC weekdays).
+          </p>
+        </div>
+      )}
+
+      {!loading && !error && rows.length === 0 && !schemaPending && (
         <div className="mt-6 rounded-lg border border-zinc-800 p-6 text-sm text-zinc-500">
           No LLM usage recorded for the last {days} days. The agent populates the
           <code className="font-mono ml-1">llmusage</code> table on every API call.
