@@ -45,6 +45,11 @@ export async function GET() {
     return NextResponse.json(rows);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    // Table doesn't exist yet — return empty list with a setup hint rather
+    // than a 500, so the UI can show a friendly "run init-db" message.
+    if (message.includes("relation") && message.includes("does not exist")) {
+      return NextResponse.json({ rows: [], setup_required: true });
+    }
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

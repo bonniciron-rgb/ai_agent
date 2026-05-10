@@ -14,7 +14,7 @@ import { SignJWT, jwtVerify } from "jose";
 import { env } from "./env";
 
 export const SESSION_COOKIE = "ai_agent_session";
-const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days
+const SESSION_TTL_SECONDS = env.SESSION_TTL_DAYS() * 24 * 60 * 60;
 const TELEGRAM_AUTH_MAX_AGE_SECONDS = 60 * 60 * 24; // 1 day
 
 export interface TelegramAuthData {

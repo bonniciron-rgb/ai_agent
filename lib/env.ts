@@ -22,6 +22,17 @@ export const env = {
   /** Secret used to sign session cookies. Defaults to the bot token if unset. */
   SESSION_SECRET: () =>
     process.env.SESSION_SECRET || required("TELEGRAM_BOT_TOKEN"),
+
+  /**
+   * Dashboard session duration in days (default 7).
+   * Set SESSION_TTL_DAYS in Vercel env vars to adjust without a redeploy.
+   */
+  SESSION_TTL_DAYS: (): number => {
+    const raw = process.env.SESSION_TTL_DAYS;
+    if (!raw) return 7;
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : 7;
+  },
 };
 
 /**
