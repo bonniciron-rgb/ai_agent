@@ -10,8 +10,12 @@ from ai_agent.db.models import (
     OrderType,
     Position,
     Proposal,
+    ProposalReasoning,
     ProposalStatus,
+    Reconciliation,
     Setting,
+    ShadowDecision,
+    ShadowPosition,
 )
 
 __all__ = [
@@ -25,8 +29,12 @@ __all__ = [
     "OrderType",
     "Position",
     "Proposal",
+    "ProposalReasoning",
     "ProposalStatus",
+    "Reconciliation",
     "Setting",
+    "ShadowDecision",
+    "ShadowPosition",
     "create_engine_from_url",
     "get_engine",
     "get_session",
