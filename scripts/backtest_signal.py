@@ -50,7 +50,7 @@ def main() -> int:
     parser.add_argument(
         "--sector-map",
         default=None,
-        help='Path to JSON file mapping symbol→sector ETF (for sector_relative_strength signal). '
+        help="Path to JSON file mapping symbol→sector ETF (for sector_relative_strength signal). "
         'Example: \'{"AAPL": "XLK", "JPM": "XLF"}\'',
     )
     args = parser.parse_args()
