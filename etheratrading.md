@@ -150,16 +150,16 @@
 
 ---
 
-### Batch 11: B5 Short Interest + Momentum Signal [Open PR #55]
-**PR #55 (CI: pending)**
+### Batch 11: B5 Short Interest + Momentum Signal [Merged PR #55]
+**PR #55 (CI: ✅ passed 2026-05-11)**
 
 | Feature | Files | Status | Notes |
 |---------|-------|--------|-------|
-| Signal implementation | `src/ai_agent/signals/short_interest.py` | [Open PR #55] | `ShortInterestMomentumSignal` — long when `short_percent_of_float >= 15%` AND 20d return `>= 3%`; avoids falling-knife trap |
-| yfinance injection helper | `src/ai_agent/signals/runner.py` | [Open PR #55] | `_inject_short_interest()` + call in `backtest_signal()`; yfinance `shortPercentOfFloat`; try/except → default 0.0 offline |
-| `__init__.py` export | `src/ai_agent/signals/__init__.py` | [Open PR #55] | `ShortInterestMomentumSignal` added to public API |
-| CLI registration | `scripts/backtest_signal.py` | [Open PR #55] | `short_interest_momentum` choice in `REGISTRY` |
-| Test suite | `tests/signals/test_short_interest.py` | [Open PR #55] | 19 tests across 8 classes (squeeze setup, low short, negative momentum, flat momentum, exact thresholds, custom params, insufficient history, missing data, attributes) |
+| Signal implementation | `src/ai_agent/signals/short_interest.py` | ✅ | `ShortInterestMomentumSignal` — long when `short_percent_of_float >= 15%` AND 20d return `>= 3%`; avoids falling-knife trap |
+| yfinance injection helper | `src/ai_agent/signals/runner.py` | ✅ | `_inject_short_interest()` + call in `backtest_signal()`; yfinance `shortPercentOfFloat`; try/except → default 0.0 offline |
+| `__init__.py` export | `src/ai_agent/signals/__init__.py` | ✅ | `ShortInterestMomentumSignal` added to public API |
+| CLI registration | `scripts/backtest_signal.py` | ✅ | `short_interest_momentum` choice in `REGISTRY` |
+| Test suite | `tests/signals/test_short_interest.py` | ✅ | 19 tests across 8 classes (squeeze setup, low short, negative momentum, flat momentum, exact thresholds, custom params, insufficient history, missing data, attributes) |
 
 **Fifth real signal through C1.** Squeeze-setup logic: short interest as squeeze fuel + price momentum as trigger. Data source: yfinance `shortPercentOfFloat` — no FINRA REGSHO parser needed; NYSE/NASDAQ publish snapshot ~twice monthly.
 
@@ -207,7 +207,7 @@ Each signal validates via C1 harness (backtest → 2-week shadow → live). **Re
 | **A2: Post-Earnings Drift (PEAD)** | Finnhub (provisioned) | 2d | ✅ Merged (#52) | Earnings surprise × trend persistence (well-documented anomaly) |
 | **B2: Analyst Estimate Revisions** | Finnhub `/stock/recommendation` (free) | 1d | ✅ Merged (#53) | 3+ consecutive upward EPS revisions → sustained outperformance |
 | **A3: Insider Buying (Form 4)** | SEC EDGAR (free) | 2d | ✅ Merged (#54) | Officer/director buys precede outsized returns on avg |
-| **B5: Short Interest + Momentum** | yfinance `shortPercentOfFloat` (free) | 1d | Open PR #55 | High short float + rising 20d momentum = squeeze setup |
+| **B5: Short Interest + Momentum** | yfinance `shortPercentOfFloat` (free) | 1d | ✅ Merged (#55) | High short float + rising 20d momentum = squeeze setup |
 | **B1: Options Flow** | Polygon / Tradier (paid, user opt-in) | 3d | Backlog | Unusual call/put volume detects institutional positioning |
 
 **Deprioritized**: Twitter/X (API now paid), StockTwits (low SNR), Dark pool (all quality sources paid $300+/mo).
@@ -259,13 +259,13 @@ Each signal validates via C1 harness (backtest → 2-week shadow → live). **Re
 
 ### Status
 - **Last PR shipped**: PR #54 (A3 Insider Buying) — merged & live
-- **Active PRs**: PR #55 (B5 Short Interest + Momentum) — draft, CI pending
+- **Active PRs**: none
 - **Blocked by**: Official sigil SVG from designer (non-blocking, placeholder ships)
-- **In flight**: B5 Short Interest + Momentum — PR #55 open, awaiting review/merge
+- **In flight**: B1 Options Flow — awaiting greenlight (paid feed / user opt-in required)
 
 ### Metrics (as of 2026-05-11)
 - **LLM usage (7d)**: $X.XX (last check: dashboard live, waiting for first cron cycle)
-- **Signal backtests**: 2 reference ✅; A1 ✅ + shadow; A2 ✅ + shadow; B2 ✅ + shadow; A3 ✅ + shadow; B5 PR #55 open; B1 pending
+- **Signal backtests**: 2 reference ✅; A1 ✅ + shadow; A2 ✅ + shadow; B2 ✅ + shadow; A3 ✅ + shadow; B5 ✅ + shadow; B1 pending
 - **PWA installs**: Tracking via web push subscriptions (baseline: not yet measured)
 - **Approval surface**: Telegram + PWA both ready
 
@@ -411,7 +411,7 @@ Each signal validates via C1 harness (backtest → 2-week shadow → live). **Re
 | #52 | A2 post-earnings drift signal | ✅ | 2026-05-11 | Second real signal through C1; PEAD anomaly; Finnhub injection via `_inject_earnings_events()` |
 | #53 | B2 analyst revision momentum signal | ✅ | 2026-05-11 | Third real signal through C1; Hawkins et al. basis; Finnhub `/stock/recommendation` via `_inject_recommendations()` |
 | #54 | A3 insider buying (Form 4) signal | ✅ | 2026-05-11 | Fourth real signal through C1; Cohen-Malloy-Pomorski basis; SEC EDGAR via `_inject_insider_events()` |
-| #55 | B5 short interest + momentum signal | 🔵 Draft | — | Fifth real signal through C1; squeeze-setup logic; yfinance `shortPercentOfFloat` data source |
+| #55 | B5 short interest + momentum signal | ✅ | 2026-05-11 | Fifth real signal through C1; squeeze-setup logic; yfinance `shortPercentOfFloat` data source |
 
 ---
 
@@ -430,10 +430,10 @@ Each signal validates via C1 harness (backtest → 2-week shadow → live). **Re
 - ✅ A2 post-earnings drift signal (Bernard & Thomas PEAD anomaly via Finnhub)
 - ✅ B2 analyst revision momentum signal (Hawkins et al. via Finnhub recommendation trends)
 - ✅ A3 insider buying (Form 4) signal (Cohen-Malloy-Pomorski anomaly via SEC EDGAR)
-- 🔵 B5 short interest + momentum signal — PR #55 open (squeeze-setup: high short float + positive 20d return)
+- ✅ B5 short interest + momentum signal (squeeze-setup: high short float + positive 20d return)
 
 ---
 
 **Maintained by**: Claude  
 **Next review**: Daily (or after each PR merge)  
-**Last sync**: 2026-05-11 (PR #55 B5 Short Interest + Momentum opened; 4 signals merged, 1 in draft; next batch → B1 Options Flow [user opt-in / paid feed required])
+**Last sync**: 2026-05-11 (PR #55 B5 merged; 5 free alpha signals live; next batch → B1 Options Flow [user opt-in / paid feed required])
