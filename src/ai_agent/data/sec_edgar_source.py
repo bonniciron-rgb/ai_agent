@@ -32,10 +32,14 @@ EDGAR_SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik}.json"
 EDGAR_ARCHIVES_URL = (
     "https://www.sec.gov/Archives/edgar/data/{cik}/{accession_clean}/{accession}.txt"
 )
+COMPANY_TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 
 # SEC fair-use rate limit: 10 requests/second.  We are defensive and pace at
 # roughly 5 req/sec with a 0.2s inter-request sleep when iterating filings.
 _INTER_REQUEST_SLEEP = 0.2
+
+# Cache for dynamic CIK lookups (populated on first use).
+_CIK_CACHE: dict[str, str] = {}
 
 
 class SecEdgarSource:
@@ -78,6 +82,42 @@ class SecEdgarSource:
         self._user_agent = user_agent
         self._client = client
         self._timeout = timeout_seconds
+
+    @classmethod
+    def symbol_to_cik(cls, symbol: str) -> str | None:
+        """Resolve a stock ticker symbol to its SEC CIK.
+
+        Checks a cached registry (populated from SEC company_tickers.json on first call).
+        Returns the zero-padded 10-digit CIK string, or None if not found.
+
+        Parameters
+        ----------
+        symbol:
+            Stock ticker (e.g., 'AAPL'). Case-insensitive.
+        """
+        global _CIK_CACHE
+        sym_upper = symbol.upper()
+
+        # Cache hit
+        if sym_upper in _CIK_CACHE:
+            return _CIK_CACHE[sym_upper]
+
+        # Cache empty — fetch and populate
+        if not _CIK_CACHE:
+            try:
+                resp = httpx.get(COMPANY_TICKERS_URL, timeout=10.0)
+                resp.raise_for_status()
+                tickers = resp.json()  # dict[str, dict[str, ...]]
+                for entry in tickers.values():
+                    if isinstance(entry, dict):
+                        tick = entry.get("ticker", "").upper()
+                        cik = entry.get("cik_str", "")
+                        if tick and cik:
+                            _CIK_CACHE[tick] = str(cik).zfill(10)
+            except Exception as exc:
+                logger.warning("Failed to fetch company_tickers.json: %s", exc)
+
+        return _CIK_CACHE.get(sym_upper)
 
     def _open(self) -> httpx.Client:
         return self._client or httpx.Client(

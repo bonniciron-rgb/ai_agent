@@ -191,7 +191,7 @@ def fetch_insider_events(symbols: list[str], lookback_days: int = 90) -> dict[st
     sec = SecEdgarSource(user_agent=sec_ua)
     out: dict[str, list] = {}
     for sym in symbols:
-        cik = SYMBOL_TO_CIK.get(sym.upper())
+        cik = SYMBOL_TO_CIK.get(sym.upper()) or SecEdgarSource.symbol_to_cik(sym)
         if not cik:
             logger.warning("No CIK mapping for %s — skipping insider data", sym)
             continue
