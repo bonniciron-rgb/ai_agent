@@ -243,6 +243,50 @@ def _inject_insider_events(signal: Signal, symbols: list[str], ref_date: date) -
     signal.insider_events = injected
 
 
+def _inject_short_interest(signal: Signal, symbols: list[str]) -> None:
+    """Fetch short interest from yfinance and inject into a ShortInterestMomentumSignal.
+
+    No-op for any other signal type.  Mutates *signal.short_data* in place so
+    the runner does not need to know which symbols are required before construction.
+
+    Uses ``yf.Ticker(symbol).info.get("shortPercentOfFloat", 0.0)`` — wrapped in a
+    try/except so the signal degrades gracefully when yfinance is unreachable (offline
+    tests, CI without internet access, etc.).  The latest snapshot value is sufficient;
+    NYSE/NASDAQ update short interest ~twice per month.
+    """
+    # Import here to avoid a circular import; short_interest imports signals.base, not runner.
+    from ai_agent.signals.short_interest import ShortInterestMomentumSignal
+
+    if not isinstance(signal, ShortInterestMomentumSignal):
+        return
+    if signal.short_data:
+        # Caller pre-populated short_data (e.g. in tests) — trust them, nothing to do.
+        return
+
+    try:
+        import yfinance as yf
+    except ImportError:
+        logger.warning(
+            "yfinance not available — ShortInterestMomentumSignal short_data will be empty"
+        )
+        return
+
+    injected: dict[str, float] = {}
+    for sym in symbols:
+        try:
+            info = yf.Ticker(sym).info
+            short_pct = info.get("shortPercentOfFloat", 0.0) or 0.0
+            injected[sym] = float(short_pct)
+            logger.info("Injected shortPercentOfFloat %.2f for %s", short_pct, sym)
+        except Exception as exc:
+            logger.warning(
+                "yfinance short interest fetch failed for %s: %s — defaulting to 0.0", sym, exc
+            )
+            injected[sym] = 0.0
+
+    signal.short_data = injected
+
+
 def _inject_recommendations(signal: Signal, symbols: list[str], ref_date: date) -> None:
     """Fetch analyst recommendation trends from Finnhub and inject into an AnalystRevisionMomentumSignal.
 
@@ -391,6 +435,8 @@ def backtest_signal(
     _inject_recommendations(signal, symbols=symbols, ref_date=end)
     # Wire SEC EDGAR Form 4 insider events into the signal if it needs them and they weren't pre-loaded.
     _inject_insider_events(signal, symbols=symbols, ref_date=end)
+    # Wire yfinance short interest snapshots into the signal if it needs them and they weren't pre-loaded.
+    _inject_short_interest(signal, symbols=symbols)
 
     per_symbol: dict[str, dict] = {}
     portfolio_equity = pd.Series(dtype="float64")

@@ -27,6 +27,7 @@ from ai_agent.signals import (
     InsiderBuyingSignal,
     PostEarningsDriftSignal,
     SectorRelativeStrengthSignal,
+    ShortInterestMomentumSignal,
     SmaCrossSignal,
     backtest_signal,
     save_backtest_result,
@@ -38,6 +39,7 @@ REGISTRY = {
     "insider_buying": InsiderBuyingSignal,
     "post_earnings_drift": PostEarningsDriftSignal,
     "sector_relative_strength": SectorRelativeStrengthSignal,
+    "short_interest_momentum": ShortInterestMomentumSignal,
     "sma_cross": SmaCrossSignal,
 }
 
