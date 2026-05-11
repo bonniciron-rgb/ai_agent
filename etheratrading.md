@@ -134,17 +134,17 @@
 
 ---
 
-### Batch 9: B2 Analyst Estimate Revision Momentum Signal [Open PR #53]
-**PR #53 (CI: pending)**
+### Batch 9: B2 Analyst Estimate Revision Momentum Signal [Merged PR #53]
+**PR #53 (CI: ✅ passed 2026-05-11)**
 
 | Feature | Files | Status | Notes |
 |---------|-------|--------|-------|
-| Signal implementation | `src/ai_agent/signals/analyst_revisions.py` | [Open PR #53] | `AnalystRevisionMomentumSignal` + `RecommendationSnapshot` dataclass; long when bullish score strictly improves for ≥3 consecutive months |
-| Finnhub `recommendation_trends()` | `src/ai_agent/data/finnhub_source.py` | [Open PR #53] | New method calling `GET /stock/recommendation`; mirrors `earnings_calendar()` style |
-| Finnhub injection helper | `src/ai_agent/signals/runner.py` | [Open PR #53] | `_inject_recommendations()` + call in `backtest_signal()`; mirrors A1/A2 pattern |
-| `__init__.py` export | `src/ai_agent/signals/__init__.py` | [Open PR #53] | `RecommendationSnapshot`, `AnalystRevisionMomentumSignal` added to public API |
-| CLI registration | `scripts/backtest_signal.py` | [Open PR #53] | `analyst_revision_momentum` choice in `REGISTRY` |
-| Test suite | `tests/signals/test_analyst_revisions.py` | [Open PR #53] | 28 tests across 8 classes (streak, plateau, stale, custom thresholds, empty data, formula, attributes) |
+| Signal implementation | `src/ai_agent/signals/analyst_revisions.py` | ✅ | `AnalystRevisionMomentumSignal` + `RecommendationSnapshot` dataclass; long when bullish score strictly improves for ≥3 consecutive months |
+| Finnhub `recommendation_trends()` | `src/ai_agent/data/finnhub_source.py` | ✅ | New method calling `GET /stock/recommendation`; mirrors `earnings_calendar()` style |
+| Finnhub injection helper | `src/ai_agent/signals/runner.py` | ✅ | `_inject_recommendations()` + call in `backtest_signal()`; mirrors A1/A2 pattern |
+| `__init__.py` export | `src/ai_agent/signals/__init__.py` | ✅ | `RecommendationSnapshot`, `AnalystRevisionMomentumSignal` added to public API |
+| CLI registration | `scripts/backtest_signal.py` | ✅ | `analyst_revision_momentum` choice in `REGISTRY` |
+| Test suite | `tests/signals/test_analyst_revisions.py` | ✅ | 28 tests across 8 classes (streak, plateau, stale, custom thresholds, empty data, formula, attributes) |
 
 **Third real signal through C1.** Based on Hawkins et al. analyst revision momentum anomaly. Finnhub `/stock/recommendation` integrated via `_inject_recommendations()`.
 
@@ -174,7 +174,7 @@ Each signal validates via C1 harness (backtest → 2-week shadow → live). **Re
 |--------|--------|------------|--------|------|
 | **A1: Sector Relative Strength** | Yahoo Finance (free) | 1.5d | ✅ Shadow (#50) | 20d return spread vs sector ETF |
 | **A2: Post-Earnings Drift (PEAD)** | Finnhub (provisioned) | 2d | ✅ Merged (#52) | Earnings surprise × trend persistence (well-documented anomaly) |
-| **B2: Analyst Estimate Revisions** | Finnhub `/stock/recommendation` (free) | 1d | Open PR #53 | 3+ consecutive upward EPS revisions → sustained outperformance |
+| **B2: Analyst Estimate Revisions** | Finnhub `/stock/recommendation` (free) | 1d | ✅ Merged (#53) | 3+ consecutive upward EPS revisions → sustained outperformance |
 | **A3: Insider Buying (Form 4)** | SEC EDGAR (free) | 2d | Backlog | Officer/director buys precede outsized returns on avg |
 | **B5: Short Interest + Momentum** | FINRA REGSHO (free, twice monthly) | 1d | Backlog | High short float + rising 20d momentum = squeeze setup |
 | **B1: Options Flow** | Polygon / Tradier (paid, user opt-in) | 3d | Backlog | Unusual call/put volume detects institutional positioning |
@@ -227,14 +227,14 @@ Each signal validates via C1 harness (backtest → 2-week shadow → live). **Re
 ## 📋 Daily Sync Template
 
 ### Status
-- **Last PR shipped**: PR #52 (A2 post-earnings drift signal) — merged & live
-- **Active PRs**: PR #53 (B2 analyst revision momentum) — draft, CI pending
+- **Last PR shipped**: PR #53 (B2 analyst revision momentum) — merged & live
+- **Active PRs**: none
 - **Blocked by**: Official sigil SVG from designer (non-blocking, placeholder ships)
-- **In flight**: B2 Analyst Revisions — PR #53 open
+- **In flight**: A3 Insider Form 4 — awaiting greenlight
 
 ### Metrics (as of 2026-05-11)
 - **LLM usage (7d)**: $X.XX (last check: dashboard live, waiting for first cron cycle)
-- **Signal backtests**: 2 reference ✅; A1 ✅ merged + shadow; A2 ✅ merged + shadow; B2 🔵 PR #53; A3/B5/B1 pending
+- **Signal backtests**: 2 reference ✅; A1 ✅ merged + shadow; A2 ✅ merged + shadow; B2 ✅ merged + shadow; A3/B5/B1 pending
 - **PWA installs**: Tracking via web push subscriptions (baseline: not yet measured)
 - **Approval surface**: Telegram + PWA both ready
 
@@ -377,7 +377,7 @@ Each signal validates via C1 harness (backtest → 2-week shadow → live). **Re
 | #50 | A1 Sector relative strength signal | ✅ | 2026-05-11 | First real signal through C1 harness; format-fix follow-up commit 129f177 |
 | #51 | C1 harness fix + A1 backtest validation | ✅ | 2026-05-11 | Critical: `sector_prices` bug fixed; backtest report + reproducible script |
 | #52 | A2 post-earnings drift signal | ✅ | 2026-05-11 | Second real signal through C1; PEAD anomaly; Finnhub injection via `_inject_earnings_events()` |
-| #53 | B2 analyst revision momentum signal | 🔵 Draft | — | Third real signal through C1; Hawkins et al. basis; Finnhub `/stock/recommendation` via `_inject_recommendations()` |
+| #53 | B2 analyst revision momentum signal | ✅ | 2026-05-11 | Third real signal through C1; Hawkins et al. basis; Finnhub `/stock/recommendation` via `_inject_recommendations()` |
 
 ---
 
@@ -394,10 +394,10 @@ Each signal validates via C1 harness (backtest → 2-week shadow → live). **Re
 - ✅ A1 sector relative-strength signal (first real alpha through C1 harness)
 - ✅ C1 harness critical fix (`sector_prices` injection — was producing 0 trades in production)
 - ✅ A2 post-earnings drift signal (Bernard & Thomas PEAD anomaly via Finnhub)
-- 🔵 B2 analyst revision momentum signal (Hawkins et al.; PR #53 open)
+- ✅ B2 analyst revision momentum signal (Hawkins et al. via Finnhub recommendation trends)
 
 ---
 
 **Maintained by**: Claude  
 **Next review**: Daily (or after each PR merge)  
-**Last sync**: 2026-05-11 (PR #53 B2 Analyst Revisions opened; next batch → A3 Insider Buying)
+**Last sync**: 2026-05-11 (PR #53 B2 Analyst Revisions merged; next batch → A3 Insider Form 4)
