@@ -6,6 +6,7 @@ yet — see the C1 PR description.
 """
 
 from ai_agent.signals.base import Signal, SignalContext, SignalResult
+from ai_agent.signals.pead import EarningsEvent, PostEarningsDriftSignal
 from ai_agent.signals.reference import AlwaysFlatSignal, SmaCrossSignal
 from ai_agent.signals.runner import (
     SignalBacktestSummary,
@@ -17,6 +18,8 @@ from ai_agent.signals.strategy_adapter import SignalStrategy
 
 __all__ = [
     "AlwaysFlatSignal",
+    "EarningsEvent",
+    "PostEarningsDriftSignal",
     "SectorRelativeStrengthSignal",
     "Signal",
     "SignalBacktestSummary",

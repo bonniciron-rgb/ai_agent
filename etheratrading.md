@@ -117,23 +117,55 @@
 | CLI registration | `scripts/backtest_signal.py` | ✅ | `sector_relative_strength` choice + `--sector-map` JSON flag |
 | Test suite | `tests/signals/test_sector_rs.py` | ✅ | 16 tests (outperform→long, underperform→flat, threshold edge, SPY fallback, insufficient history) |
 
-**First real signal flowing through C1 harness.** Backtest validation pending (next step before A2).
+**First real signal flowing through C1 harness.** Validated 2026-05-11 (synthetic data, harness verified).
+
+---
+
+### Batch 7: C1 Harness Fix + A1 Backtest Validation [Merged PR #51]
+**PR #51 (CI: ✅ passed 2026-05-11)**
+
+| Feature | Files | Status | Notes |
+|---------|-------|--------|-------|
+| Harness bug fix | `src/ai_agent/signals/runner.py` | ✅ | `_inject_sector_prices()` — ETF bars now wired into signal before per-symbol loop; was producing 0 trades |
+| Backtest report | `reports/a1-backtest.md` | ✅ | 18 symbols × 521 days; synthetic data (sandbox network blocked); Sharpe 0.46, harness verified |
+| Backtest script | `scripts/run_a1_backtest.py` | ✅ | Reproducible real-data script (runs when network available) |
+
+**Critical fix**: without this, every signal relying on external prices would silently produce 0 trades in production.
+
+---
+
+### Batch 8: A2 Post-Earnings Drift (PEAD) Signal [Open PR #52]
+**PR #52 (draft — CI queued)**
+
+| Feature | Files | Status | Notes |
+|---------|-------|--------|-------|
+| Signal implementation | `src/ai_agent/signals/pead.py` | 🔵 | `PostEarningsDriftSignal` + `EarningsEvent` dataclass; long when earnings surprise ≥ threshold within lookback/holding windows |
+| Finnhub injection helper | `src/ai_agent/signals/runner.py` | 🔵 | `_inject_earnings_events()` — fetches `/calendar/earnings` via existing `FinnhubSource`, mirrors `_inject_sector_prices()` pattern |
+| `__init__.py` export | `src/ai_agent/signals/__init__.py` | 🔵 | `EarningsEvent`, `PostEarningsDriftSignal` added to public API |
+| CLI registration | `scripts/backtest_signal.py` | 🔵 | `post_earnings_drift` choice in `REGISTRY` |
+| Test suite | `tests/signals/test_pead.py` | 🔵 | 20 tests across 8 classes (surprise thresholds, windows, zero-consensus guard, multi-event, empty list) |
+
+**Second real signal through C1.** Based on Bernard & Thomas (1989/1990) PEAD anomaly. FinnhubSource wrapper reused (no new deps).
 
 ---
 
 ## 🚀 Upcoming Roadmap
 
-### Phase A: Alpha Signals (Proof-of-Concept Layer)
-Each signal validates via C1 harness (backtest → shadow → live).
+### Phase A & B: Alpha Signal Pipeline
+Each signal validates via C1 harness (backtest → 2-week shadow → live). **Revised queue adds B2/B5 as fast wins.**
 
-| Signal | Data Source | Est. Effort | Status | Notes |
-|--------|-------------|------------|--------|-------|
-| **A1: Sector Relative Strength** | Yahoo Finance (free) | 1.5d | ✅ Merged (#50) | 20d lookback, pure feature engineering, no ML required |
-| **A2: Post-Earnings Drift (PEAD)** | Finnhub (already provisioned) | 2d | Backlog | 2d lookback, earnings surprise × trend, low-latency edge |
-| **A3: Insider Buying (Form 4)** | SEC EDGAR (free) | 2d | Backlog | Officer/director buys, 1-week forward look, monthly batches |
-| **B1: Options Flow** | Polygon / Tradier (paid, user opt-in) | 3d | Backlog | IV percentile, volume asymmetry, user explicitly enables feed |
+| Signal | Source | Est. Effort | Status | Edge |
+|--------|--------|------------|--------|------|
+| **A1: Sector Relative Strength** | Yahoo Finance (free) | 1.5d | ✅ Shadow (#50) | 20d return spread vs sector ETF |
+| **A2: Post-Earnings Drift (PEAD)** | Finnhub (provisioned) | 2d | **Open PR #52** | Earnings surprise × trend persistence (well-documented anomaly) |
+| **B2: Analyst Estimate Revisions** | Finnhub `/stock/recommendation` (free) | 1d | Backlog | 3+ consecutive upward EPS revisions → sustained outperformance |
+| **A3: Insider Buying (Form 4)** | SEC EDGAR (free) | 2d | Backlog | Officer/director buys precede outsized returns on avg |
+| **B5: Short Interest + Momentum** | FINRA REGSHO (free, twice monthly) | 1d | Backlog | High short float + rising 20d momentum = squeeze setup |
+| **B1: Options Flow** | Polygon / Tradier (paid, user opt-in) | 3d | Backlog | Unusual call/put volume detects institutional positioning |
 
-**Timeline**: A1 → A2 → A3 → B1 (sequential validation, each signal gets 2-week shadow window).
+**Deprioritized**: Twitter/X (API now paid), StockTwits (low SNR), Dark pool (all quality sources paid $300+/mo).
+
+**Sprint order**: A2 → B2 → A3 → B5 → B1 (sequential validation, each signal gets 2-week shadow).
 
 **Next Batch**: A2 PEAD (Post-Earnings Drift) — Finnhub already provisioned, 2d effort.
 
@@ -179,14 +211,14 @@ Each signal validates via C1 harness (backtest → shadow → live).
 ## 📋 Daily Sync Template
 
 ### Status
-- **Last PR shipped**: PR #50 (A1 sector relative-strength signal) — merged & live
-- **Active PRs**: none
-- **Blocked by**: Official sigil SVG from designer (placeholder currently ships)
-- **In flight**: A1 backtest complete — ⚠️ Harness works (critical sector_prices bug fixed), A1 Sharpe 0.46 < 0.5 gate; A1 enters shadow, A2 unblocked
+- **Last PR shipped**: PR #51 (C1 harness fix + A1 backtest validation) — merged & live
+- **Active PRs**: PR #52 (A2 PEAD signal — draft, CI queued)
+- **Blocked by**: Official sigil SVG from designer (non-blocking, placeholder ships)
+- **In flight**: PR #52 A2 PEAD — open draft, awaiting CI + review
 
 ### Metrics (as of 2026-05-11)
 - **LLM usage (7d)**: $X.XX (last check: dashboard live, waiting for first cron cycle)
-- **Signal backtests**: 2 reference (AlwaysFlatSignal, SmaCrossSignal) ✅; A1 ✅ shipped (real-data backtest pending); A2–B1 pending
+- **Signal backtests**: 2 reference ✅; A1 ✅ merged + shadow; A2/B2/A3/B5/B1 pending
 - **PWA installs**: Tracking via web push subscriptions (baseline: not yet measured)
 - **Approval surface**: Telegram + PWA both ready
 
@@ -194,10 +226,9 @@ Each signal validates via C1 harness (backtest → shadow → live).
 - None currently; awaiting designer sigil SVG (non-blocking, placeholder ships)
 
 ### Next Batch
-**Recommended**: A2 PEAD (Post-Earnings Drift).
-- Effort: 2 days
-- Risk: Low (Finnhub already provisioned)
-- Impact: Second real alpha signal through C1 harness; earnings-surprise edge
+**Recommended**: B2 Analyst Revisions (fast follow, Finnhub free, 1d) after A2 PR #52 merges.
+- B2 effort: 1 day; same Finnhub endpoint; analyst upgrade momentum signal
+- A2 (#52) + B2 together give the agent two independent catalyst-driven edges
 
 ---
 
@@ -234,6 +265,44 @@ Each signal validates via C1 harness (backtest → shadow → live).
 - **Notifications**: Web Push API (push event → notificationclick handler)
 - **Icons**: Auto-generated at build time from `branding/sigil.svg` (one-file update)
 
+### Daily Operations Schedule
+- **Daily agent loop**: `06:30 UTC, Mon–Fri` (US pre-market) — `.github/workflows/daily.yml`
+  - Entry: `python -m ai_agent.loop.daily_loop`
+  - Steps: init DB → load watchlist → halt check → ingest bars → build T212 client → run Claude agent → risk-rail filter → persist proposals → send Telegram digest
+  - Manual trigger: GitHub Actions `workflow_dispatch` with optional `--dry-run`
+  - Local trigger: `python -m ai_agent.loop.daily_loop --dry-run`
+- **Daily digest (cost + proposals)**: shares the same cron; pushes to Telegram + web-push
+- **Macro regime snapshot**: `.github/workflows/macro-regime.yml` (separate cron, refreshes regime classifier daily)
+- **Shadow MTM**: `.github/workflows/shadow-mtm.yml` (marks-to-market shadow positions for validation accuracy)
+
+### Signal Source Research (Lead Architect Notes — 2026-05-11)
+
+**Constraint**: The agent ingests only **programmatic, machine-readable** signal sources. Video/audio channels (e.g., JdubTrades_Telegram) cannot be parsed natively — would need transcription pipeline or manual screenshot OCR.
+
+**Tier 1 — On Roadmap (free or already provisioned)**
+| Signal | Source | Edge basis |
+|--------|--------|------------|
+| A2: Post-earnings drift (PEAD) | Finnhub (provisioned) | Earnings surprise × trend persistence — academic anomaly (Bernard & Thomas) |
+| A3: Insider Form 4 | SEC EDGAR (free) | Officer/director buys precede outsized returns (Cohen, Malloy, Pomorski) |
+| B2: Analyst estimate revisions | Finnhub `/stock/recommendation` (free) | 3+ consecutive upward EPS revisions → 3–12mo outperformance (Hawkins et al.) |
+| B5: Short interest + momentum | FINRA REGSHO (free, biweekly) | High short float + positive 20d momentum = squeeze setup |
+| B1: Options flow | Polygon/Tradier (paid, opt-in) | Unusual call/put volume detects institutional positioning before price moves |
+
+**Tier 2 — Considered, deprioritized**
+| Source | Reason to skip |
+|--------|----------------|
+| Twitter/X sentiment | API gated behind $100+/mo paywall, coverage degraded |
+| StockTwits | Free but high retail noise, low signal-to-noise |
+| Dark pool / block trades | All quality sources paid ($300+/mo) |
+| Bloomberg ESI | Enterprise pricing |
+| 13F institutional positioning | 45-day filing lag limits short-term value (parking lot for future) |
+
+**Tier 3 — Manual / external channels**
+| Source | Status |
+|--------|--------|
+| External Telegram trading channels (e.g., JdubTrades) | Manual paste-and-analyze; video-only content not parseable. Future: build inbound webhook endpoint accepting structured payload (symbol, side, levels, source tag) |
+| Discord / private Slack signal rooms | Same as above — manual interim, webhook future |
+
 ---
 
 ## 📍 Outstanding Items
@@ -241,7 +310,9 @@ Each signal validates via C1 harness (backtest → shadow → live).
 | Item | Status | Notes |
 |------|--------|-------|
 | Official sigil SVG | Pending from designer | Placeholder `branding/sigil.svg` ships; replace file once received, rebuild icons |
-| A1 backtest validation | ⚠️ Harness works, no edge (Sharpe 0.46 < 0.5) — A1 shadow, proceed to A2 | Synthetic data (network blocked); harness bug fixed (`_inject_sector_prices`); see `reports/a1-backtest.md` |
+| A1 real-data backtest | Pending (network access required) | Run `scripts/run_a1_backtest.py` when outbound network available; synthetic run confirmed harness works |
+| Manual signal ingestion API | Backlog | No inbound API yet. Spec: `POST /api/proposals/manual` with `{symbol, side, entry, stop, target, rationale, source}` — flows through same approval UI. ~3hr Sonnet sprint when prioritized |
+| Video signal channel parsing | Out of scope | External channels publishing video-only (e.g., JdubTrades) cannot be parsed; interim is screenshot OCR or manual transcription |
 | iOS Phase 2 decision | Blocked on metrics | Measure PWA adoption (2 weeks from P3 ship), DAU >50% of installs = greenlight |
 | Broker integration (Alpaca / IB) | Q3+ 2026 | Out of scope for May release |
 
@@ -288,6 +359,8 @@ Each signal validates via C1 harness (backtest → shadow → live).
 | #48 | PWA P2 web push | ✅ | 2026-05-10 | Parallel Telegram delivery |
 | #49 | PWA P3 mobile approval UI | ✅ | 2026-05-11 | CI passed, all tests ✅ |
 | #50 | A1 Sector relative strength signal | ✅ | 2026-05-11 | First real signal through C1 harness; format-fix follow-up commit 129f177 |
+| #51 | C1 harness fix + A1 backtest validation | ✅ | 2026-05-11 | Critical: `sector_prices` bug fixed; backtest report + reproducible script |
+| #52 | A2 post-earnings drift signal | 🔵 Draft | — | Second real signal through C1; PEAD anomaly; Finnhub injection via `_inject_earnings_events()` |
 
 ---
 
@@ -301,10 +374,11 @@ Each signal validates via C1 harness (backtest → shadow → live).
 - ✅ Signal validation harness (C1, backtest → shadow → live gate)
 - ✅ PWA full stack (installable, offline-capable, notifications)
 - ✅ Mobile proposal approval UI (sticky-bottom, haptic, toast)
-- ✅ A1 sector relative-strength signal (first real alpha signal through C1 harness)
+- ✅ A1 sector relative-strength signal (first real alpha through C1 harness)
+- ✅ C1 harness critical fix (`sector_prices` injection — was producing 0 trades in production)
 
 ---
 
 **Maintained by**: Claude  
 **Next review**: Daily (or after each PR merge)  
-**Last sync**: 2026-05-11 (post-A1 backtest; harness fix committed)
+**Last sync**: 2026-05-11 (A2 PEAD opened as PR #52; roadmap table updated; next batch → B2)
