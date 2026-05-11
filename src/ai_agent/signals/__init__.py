@@ -12,10 +12,12 @@ from ai_agent.signals.runner import (
     backtest_signal,
     save_backtest_result,
 )
+from ai_agent.signals.sector_rs import SectorRelativeStrengthSignal
 from ai_agent.signals.strategy_adapter import SignalStrategy
 
 __all__ = [
     "AlwaysFlatSignal",
+    "SectorRelativeStrengthSignal",
     "Signal",
     "SignalBacktestSummary",
     "SignalContext",
