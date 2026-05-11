@@ -21,6 +21,89 @@ from ai_agent.signals.strategy_adapter import SignalStrategy
 logger = logging.getLogger(__name__)
 
 
+def _inject_earnings_events(signal: Signal, symbols: list[str], ref_date: date) -> None:
+    """Fetch historical earnings from Finnhub and inject into a PostEarningsDriftSignal.
+
+    No-op for any other signal type.  Mutates *signal.earnings_events* in place so
+    the runner does not need to know which symbols are required before construction.
+
+    The look-back passed to Finnhub is ``lookback_window_days`` taken directly from
+    the signal so we fetch exactly as much history as the signal will consume.
+    """
+    # Import here to avoid a circular import; pead imports signals.base, not runner.
+    from ai_agent.signals.pead import EarningsEvent, PostEarningsDriftSignal
+
+    if not isinstance(signal, PostEarningsDriftSignal):
+        return
+    if signal.earnings_events:
+        # Caller pre-populated earnings_events (e.g. in tests) — trust them, nothing to do.
+        return
+
+    import os
+    from datetime import timedelta
+
+    from ai_agent.data.base import DataSourceError
+    from ai_agent.data.finnhub_source import FinnhubSource
+
+    api_key = os.environ.get("FINNHUB_API_KEY", "")
+    settings_key: str = ""
+    try:
+        from ai_agent.settings import get_settings
+
+        settings_key = get_settings().finnhub_api_key.get_secret_value()
+    except Exception:
+        pass
+
+    resolved_key = api_key or settings_key
+    if not resolved_key:
+        logger.warning(
+            "FINNHUB_API_KEY not set — PostEarningsDriftSignal earnings_events will be empty"
+        )
+        return
+
+    source = FinnhubSource(resolved_key)
+    lookback_days = signal.lookback_window_days
+    start = ref_date - timedelta(days=lookback_days)
+
+    injected: dict[str, list[EarningsEvent]] = {}
+    for sym in symbols:
+        try:
+            raw_events = source.earnings_calendar(sym, start=start, end=ref_date)
+        except DataSourceError as exc:
+            logger.warning("Finnhub earnings fetch failed for %s: %s", sym, exc)
+            continue
+
+        processed: list[EarningsEvent] = []
+        for ev in raw_events:
+            actual = ev.eps_actual
+            consensus = ev.eps_estimate
+            if actual is None or consensus is None:
+                continue
+            if consensus == 0:
+                logger.debug(
+                    "Skipping %s earnings on %s: consensus EPS is zero", sym, ev.event_date
+                )
+                continue
+            surprise_pct = (actual - consensus) / abs(consensus)
+            processed.append(
+                EarningsEvent(
+                    announcement_date=ev.event_date,
+                    actual_eps=actual,
+                    consensus_eps=consensus,
+                    surprise_pct=surprise_pct,
+                )
+            )
+        injected[sym] = processed
+        logger.info(
+            "Injected %d earnings events for %s (lookback %d days)",
+            len(processed),
+            sym,
+            lookback_days,
+        )
+
+    signal.earnings_events = injected
+
+
 def _inject_sector_prices(signal: Signal, days_back: int, ref_date: date) -> None:
     """Fetch sector ETF price series from DB and inject into a SectorRelativeStrengthSignal.
 
@@ -113,6 +196,8 @@ def backtest_signal(
 
     # Wire sector ETF prices into the signal if it needs them and they weren't pre-loaded.
     _inject_sector_prices(signal, days_back=days_back, ref_date=end)
+    # Wire earnings events into the signal if it needs them and they weren't pre-loaded.
+    _inject_earnings_events(signal, symbols=symbols, ref_date=end)
 
     per_symbol: dict[str, dict] = {}
     portfolio_equity = pd.Series(dtype="float64")
