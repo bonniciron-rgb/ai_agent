@@ -1,12 +1,21 @@
 """Unified backtest validation for all 5 shipped signals (A1, A2, B2, A3, B5).
 
+Backtest v2 — fixes applied after first real-data run (2026-05-11):
+  - Extended window: 4 years (2022-2026) to include the 2022 bear market
+  - A1 retune: holding 20d (was 5d), threshold 3% (was 2%) — stops overtrading
+  - A2 retune: surprise_threshold 3% (was 5%) — widens the firing window
+  - B2 retune: min_consecutive_months=2 (was 3) — more signals, lower bar for streak
+  - A3 separate universe: mid-cap / regional names where officers make direct buys
+  - B5 separate universe: names with historically elevated short float (>= 15%)
+    NOTE: shortPercentOfFloat is a live snapshot from yfinance, not historised.
+    B5 backtesting reflects current short interest applied to historical prices.
+    The signal is designed for live trading; backtest is indicative only.
+
 Pulls real market data directly from yfinance (prices, short interest),
 Finnhub (earnings calendar, analyst recommendations), and SEC EDGAR (Form 4
-insider transactions) — bypassing the DB-backed runner so this script can
-run in any environment with outbound network access (e.g. GitHub Actions).
+insider transactions) — bypassing the DB-backed runner.
 
-Writes a consolidated JSON report to ``backtest_results.json`` (and stdout)
-covering portfolio-level metrics + per-symbol breakdowns for every signal.
+Writes a consolidated JSON report to ``backtest_results.json`` (and stdout).
 
 Requires:
   - FINNHUB_API_KEY env var (for A2 / B2)
@@ -52,6 +61,8 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message
 logger = logging.getLogger("run_all_backtests")
 
 # ── Universe & period ─────────────────────────────────────────────────────────
+
+# A1 / A2 / B2: large-cap sector universe (unchanged from v1)
 SECTOR_MAP: dict[str, str] = {
     "AAPL": "XLK",
     "MSFT": "XLK",
@@ -71,17 +82,44 @@ SECTOR_MAP: dict[str, str] = {
     "HD": "XLY",
     "TSLA": "XLY",
 }
+LARGE_CAP_SYMBOLS = sorted(SECTOR_MAP.keys())
 ETFS = sorted(set(SECTOR_MAP.values()))
 BENCHMARK = "SPY"
-ALL_SYMBOLS = sorted(SECTOR_MAP.keys())
+
+# A3: mid-cap / regional names where officers make direct open-market buys.
+# Large-cap officers overwhelmingly receive options/RSUs, rarely buy shares.
+# Cohen-Malloy-Pomorski (2012) edge is strongest in this tier.
+A3_SYMBOLS = [
+    "RF",  # Regions Financial — regional bank officers buy on rate dips
+    "KEY",  # KeyCorp — same pattern
+    "FITB",  # Fifth Third Bancorp
+    "DVN",  # Devon Energy — E&P management historically buys on commodity dips
+    "APA",  # APA Corporation — same
+    "GPS",  # Gap Inc — retail, known insider purchase history
+    "M",  # Macy's — retail underdog, officer purchases in restructuring years
+    "KSS",  # Kohl's — same distressed-retail insider buying pattern
+]
+
+# B5: names with historically elevated short float.
+# shortPercentOfFloat is a live snapshot — applied to historical prices.
+# Signal is indicative for backtesting; designed for live use.
+B5_SYMBOLS = [
+    "BYND",  # Beyond Meat -- typically 40-50% short float
+    "PLUG",  # Plug Power -- hydrogen, typically 15-25% short float
+    "LCID",  # Lucid Group -- EV, typically 12-20% short float
+    "SOFI",  # SoFi Technologies -- fintech, typically 5-12% short float
+    "RIVN",  # Rivian -- EV, typically 8-15% short float
+    "TSLA",  # Tesla -- historically 15-25%, bridges large-cap and high-short tier
+]
+
+ALL_SYMBOLS_UNION = sorted(set(LARGE_CAP_SYMBOLS) | set(A3_SYMBOLS) | set(B5_SYMBOLS))
 
 END = date.today()
-START = END - timedelta(days=730)  # 2 years
+START = END - timedelta(days=1460)  # 4 years — includes 2022 bear market
 
 INITIAL_CAPITAL = 10_000.0
 ENTRY_THRESHOLD = 0.3
 EXIT_THRESHOLD = 0.0
-HOLDING_DAYS = 5
 
 
 # ── Data fetchers ─────────────────────────────────────────────────────────────
@@ -118,7 +156,7 @@ def fetch_short_interest(symbols: list[str]) -> dict[str, float]:
             info = yf.Ticker(sym).info
             out[sym] = float(info.get("shortPercentOfFloat") or 0.0)
         except Exception as exc:
-            logger.warning("short interest fetch failed for %s: %s — defaulting to 0.0", sym, exc)
+            logger.warning("short interest fetch failed for %s: %s — defaulting 0.0", sym, exc)
             out[sym] = 0.0
     return out
 
@@ -148,7 +186,7 @@ def fetch_earnings(
                 )
             )
         out[sym] = events
-        time.sleep(0.05)  # gentle pacing for 60 req/min free tier
+        time.sleep(0.05)
     return out
 
 
@@ -205,7 +243,7 @@ def fetch_insider_events(symbols: list[str], lookback_days: int = 90) -> dict[st
             try:
                 events.extend(sec.parse_form4_filing(f["accession_number"], cik))
             except Exception as exc:
-                logger.warning("SEC parse failed for %s %s: %s", sym, f["accession_number"], exc)
+                logger.warning("SEC parse %s %s: %s", sym, f["accession_number"], exc)
                 continue
             time.sleep(0.15)
         events.sort(key=lambda e: e.transaction_date)
@@ -217,17 +255,19 @@ def fetch_insider_events(symbols: list[str], lookback_days: int = 90) -> dict[st
 # ── Per-signal backtest runner ────────────────────────────────────────────────
 def run_signal_backtest(
     signal,
+    symbols: list[str],
     price_data: dict[str, pd.DataFrame],
     bench_close: pd.Series,
     *,
     label: str,
+    holding_days: int = 5,
 ) -> dict:
-    """Run a single signal against every symbol; return aggregated portfolio metrics."""
+    """Run *signal* against *symbols*; return portfolio metrics dict."""
     per_symbol: dict[str, dict] = {}
     portfolio_equity = pd.Series(dtype="float64")
     total_trades = 0
 
-    for sym in ALL_SYMBOLS:
+    for sym in symbols:
         if sym not in price_data or price_data[sym].empty:
             continue
         df = price_data[sym].copy()
@@ -241,7 +281,7 @@ def run_signal_backtest(
             symbol=sym,
             entry_threshold=ENTRY_THRESHOLD,
             exit_threshold=EXIT_THRESHOLD,
-            holding_days=HOLDING_DAYS,
+            holding_days=holding_days,
         )
         result = run_backtest(df, strategy, symbol=sym, initial_capital=INITIAL_CAPITAL)
         sym_sum = metrics_summary(result.equity_curve, result.trades)
@@ -287,15 +327,22 @@ def run_signal_backtest(
 # ── Main orchestration ────────────────────────────────────────────────────────
 def main() -> int:
     logger.info("=" * 70)
-    logger.info("Ethera Trading — unified signal backtest")
-    logger.info("Universe: %d symbols, period %s → %s", len(ALL_SYMBOLS), START, END)
+    logger.info("Ethera Trading — unified signal backtest v2")
+    logger.info(
+        "Large-cap: %d  A3 mid-cap: %d  B5 high-short: %d  period %s → %s",
+        len(LARGE_CAP_SYMBOLS),
+        len(A3_SYMBOLS),
+        len(B5_SYMBOLS),
+        START,
+        END,
+    )
     logger.info("=" * 70)
 
-    # 1. Prices for every stock + sector ETF + benchmark
-    all_tickers = ALL_SYMBOLS + ETFS + [BENCHMARK]
+    # 1. Prices — one download covers all universes
+    all_tickers = sorted(set(ALL_SYMBOLS_UNION) | set(ETFS) | {BENCHMARK})
     price_data = fetch_prices(all_tickers, START, END)
 
-    # 2. Benchmark series (date-indexed)
+    # 2. Benchmark
     bench_df = price_data.get(BENCHMARK)
     if bench_df is None or bench_df.empty:
         logger.error("No SPY benchmark data — aborting")
@@ -314,61 +361,104 @@ def main() -> int:
             s.index = pd.to_datetime(s.index).date
             sector_prices[etf] = s
 
-    # 4. Finnhub data (A2 + B2)
+    # 4. Finnhub (A2 + B2)
     finnhub_key = os.environ.get("FINNHUB_API_KEY", "")
     earnings_by_sym: dict[str, list[EarningsEvent]] = {}
     recs_by_sym: dict[str, list[RecommendationSnapshot]] = {}
     if finnhub_key:
         fh = FinnhubSource(finnhub_key)
         logger.info("Finnhub: fetching earnings + recommendation trends ...")
-        earnings_by_sym = fetch_earnings(fh, ALL_SYMBOLS, ref_date=END, lookback_days=730)
-        recs_by_sym = fetch_recommendations(fh, ALL_SYMBOLS)
+        earnings_by_sym = fetch_earnings(fh, LARGE_CAP_SYMBOLS, ref_date=END, lookback_days=1460)
+        recs_by_sym = fetch_recommendations(fh, LARGE_CAP_SYMBOLS)
     else:
         logger.warning("FINNHUB_API_KEY not set — A2 / B2 backtests will have no data")
 
-    # 5. SEC EDGAR Form 4 data (A3)
-    logger.info("SEC EDGAR: fetching Form 4 filings ...")
-    insider_by_sym = fetch_insider_events(ALL_SYMBOLS, lookback_days=730)
+    # 5. SEC EDGAR Form 4 (A3 — mid-cap universe only)
+    logger.info("SEC EDGAR: fetching Form 4 filings for A3 mid-cap universe ...")
+    insider_by_sym = fetch_insider_events(A3_SYMBOLS, lookback_days=1460)
 
-    # 6. yfinance short interest snapshots (B5)
-    logger.info("yfinance: fetching short interest snapshots ...")
-    short_data = fetch_short_interest(ALL_SYMBOLS)
+    # 6. Short interest snapshots (B5 high-short universe)
+    logger.info("yfinance: fetching short interest snapshots for B5 universe ...")
+    short_data = fetch_short_interest(B5_SYMBOLS)
+    logger.info(
+        "Short interest: %s",
+        {s: f"{v:.1%}" for s, v in short_data.items()},
+    )
 
-    # 7. Run each signal
+    # 7. Run signals
     reports: list[dict] = []
 
     logger.info("-" * 70)
-    logger.info("A1: Sector Relative Strength")
+    logger.info("A1: Sector Relative Strength (retune: 20d hold, 3%% threshold)")
     a1 = SectorRelativeStrengthSignal(
-        sector_map=SECTOR_MAP, sector_prices=sector_prices, lookback=20, threshold=0.02
+        sector_map=SECTOR_MAP,
+        sector_prices=sector_prices,
+        lookback=20,
+        threshold=0.03,  # raised from 0.02 — reduces false positives
     )
-    reports.append(run_signal_backtest(a1, price_data, bench_close, label="A1_sector_rs"))
+    reports.append(
+        run_signal_backtest(
+            a1, LARGE_CAP_SYMBOLS, price_data, bench_close, label="A1_sector_rs", holding_days=20
+        )
+    )
 
     logger.info("-" * 70)
-    logger.info("A2: Post-Earnings Drift")
-    a2 = PostEarningsDriftSignal(earnings_events=earnings_by_sym)
-    reports.append(run_signal_backtest(a2, price_data, bench_close, label="A2_pead"))
+    logger.info("A2: Post-Earnings Drift (retune: 3%% surprise threshold)")
+    a2 = PostEarningsDriftSignal(
+        earnings_events=earnings_by_sym,
+        surprise_threshold=0.03,  # lowered from 0.05 — widens trigger
+    )
+    reports.append(
+        run_signal_backtest(
+            a2, LARGE_CAP_SYMBOLS, price_data, bench_close, label="A2_pead", holding_days=20
+        )
+    )
 
     logger.info("-" * 70)
-    logger.info("B2: Analyst Revision Momentum")
-    b2 = AnalystRevisionMomentumSignal(recommendations=recs_by_sym)
-    reports.append(run_signal_backtest(b2, price_data, bench_close, label="B2_analyst_rev"))
+    logger.info("B2: Analyst Revision Momentum (retune: 2 consecutive months)")
+    b2 = AnalystRevisionMomentumSignal(
+        recommendations=recs_by_sym,
+        min_consecutive_months=2,  # lowered from 3 — more signals, still requires trend
+    )
+    reports.append(
+        run_signal_backtest(
+            b2,
+            LARGE_CAP_SYMBOLS,
+            price_data,
+            bench_close,
+            label="B2_analyst_rev",
+            holding_days=20,
+        )
+    )
 
     logger.info("-" * 70)
-    logger.info("A3: Insider Buying (Form 4)")
+    logger.info("A3: Insider Buying — mid-cap universe (RF, KEY, FITB, DVN, APA, GPS, M, KSS)")
     a3 = InsiderBuyingSignal(insider_events=insider_by_sym)
-    reports.append(run_signal_backtest(a3, price_data, bench_close, label="A3_insider"))
+    reports.append(
+        run_signal_backtest(
+            a3, A3_SYMBOLS, price_data, bench_close, label="A3_insider", holding_days=20
+        )
+    )
 
     logger.info("-" * 70)
-    logger.info("B5: Short Interest + Momentum")
-    b5 = ShortInterestMomentumSignal(short_data=short_data)
-    reports.append(run_signal_backtest(b5, price_data, bench_close, label="B5_short_squeeze"))
+    logger.info("B5: Short Squeeze — high-short universe (BYND, PLUG, LCID, SOFI, RIVN, TSLA)")
+    b5 = ShortInterestMomentumSignal(short_data=short_data, min_short_pct=0.15)
+    reports.append(
+        run_signal_backtest(
+            b5, B5_SYMBOLS, price_data, bench_close, label="B5_short_squeeze", holding_days=10
+        )
+    )
 
-    # 8. Final aggregated output
+    # 8. Output
     output = {
         "as_of": END.isoformat(),
+        "version": "v2",
         "period": [START.isoformat(), END.isoformat()],
-        "universe": ALL_SYMBOLS,
+        "universes": {
+            "large_cap": LARGE_CAP_SYMBOLS,
+            "a3_midcap": A3_SYMBOLS,
+            "b5_high_short": B5_SYMBOLS,
+        },
         "benchmark": {
             "symbol": BENCHMARK,
             "sharpe": round(bench_metrics.get("sharpe") or 0.0, 4),
@@ -381,6 +471,10 @@ def main() -> int:
             "recommendation_symbols": sum(1 for v in recs_by_sym.values() if v),
             "insider_symbols": sum(1 for v in insider_by_sym.values() if v),
             "short_interest_symbols": sum(1 for v in short_data.values() if v > 0),
+            "b5_note": (
+                "shortPercentOfFloat is a live snapshot. "
+                "B5 backtest applies current short interest to historical prices — indicative only."
+            ),
         },
         "signals": reports,
     }
@@ -390,13 +484,12 @@ def main() -> int:
     print(json.dumps(output, indent=2, default=str))
     logger.info("Wrote %s", out_path)
 
-    # Quick console summary table
     print("\n" + "=" * 70)
-    print(f"{'Signal':<22} {'Sharpe':>8} {'CAGR':>8} {'MaxDD':>8} {'Win%':>8} {'Trades':>8}")
+    print(f"{'Signal':<22} {'Sharpe':>8} {'CAGR':>8} {'MaxDD':>8} {'Alpha':>8} {'Trades':>8}")
     print("-" * 70)
     bm = output["benchmark"]
     print(
-        f"{'SPY (benchmark)':<22} {bm['sharpe']:>8.2f} {bm['cagr'] * 100:>7.1f}% "
+        f"{'SPY (4yr benchmark)':<22} {bm['sharpe']:>8.2f} {bm['cagr'] * 100:>7.1f}% "
         f"{bm['max_drawdown'] * 100:>7.1f}% {'—':>8} {'—':>8}"
     )
     for r in reports:
@@ -406,7 +499,7 @@ def main() -> int:
             continue
         print(
             f"{r['signal']:<22} {m['sharpe']:>8.2f} {m['cagr'] * 100:>7.1f}% "
-            f"{m['max_drawdown'] * 100:>7.1f}% {m['win_rate'] * 100:>7.1f}% {m['trade_count']:>8}"
+            f"{m['max_drawdown'] * 100:>7.1f}% {m['alpha'] * 100:>7.1f}% {m['trade_count']:>8}"
         )
     print("=" * 70)
     return 0
