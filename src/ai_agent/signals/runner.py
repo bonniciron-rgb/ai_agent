@@ -6,7 +6,6 @@ import json
 import logging
 from dataclasses import dataclass, field
 from datetime import date
-
 import pandas as pd
 from sqlmodel import Session
 
@@ -19,6 +18,39 @@ from ai_agent.signals.base import Signal
 from ai_agent.signals.strategy_adapter import SignalStrategy
 
 logger = logging.getLogger(__name__)
+
+
+def _inject_sector_prices(signal: Signal, days_back: int, ref_date: date) -> None:
+    """Fetch sector ETF price series from DB and inject into a SectorRelativeStrengthSignal.
+
+    No-op for any other signal type.  Mutates *signal.sector_prices* in place so
+    the runner does not need to know which ETFs are required before construction.
+    """
+    # Import here to avoid a circular import; sector_rs imports signals.base, not runner.
+    from ai_agent.signals.sector_rs import SectorRelativeStrengthSignal  # noqa: PLC0415
+
+    if not isinstance(signal, SectorRelativeStrengthSignal):
+        return
+    if signal.sector_prices:
+        # Caller pre-populated sector_prices — trust them, nothing to do.
+        return
+
+    # Collect unique ETF tickers that appear in sector_map, plus the default ETF.
+    etf_tickers: set[str] = set(signal.sector_map.values())
+    etf_tickers.add(signal.default_etf)
+
+    injected: dict[str, pd.Series] = {}
+    for etf in etf_tickers:
+        bars = bars_from_db(etf, days_back=days_back, ref_date=ref_date)
+        if not bars:
+            logger.warning("No DB bars found for sector ETF %s — signal will fall back to flat", etf)
+            continue
+        injected[etf] = pd.Series(
+            {b.trading_date: float(b.close) for b in bars}
+        ).sort_index()
+        logger.info("Injected %d price rows for sector ETF %s", len(injected[etf]), etf)
+
+    signal.sector_prices = injected
 
 
 @dataclass
@@ -77,6 +109,9 @@ def backtest_signal(
     days_back: int = 750,  # ~3 years of OHLCV
 ) -> SignalBacktestSummary:
     """Backtest signal across symbols, return aggregated portfolio metrics."""
+
+    # Wire sector ETF prices into the signal if it needs them and they weren't pre-loaded.
+    _inject_sector_prices(signal, days_back=days_back, ref_date=end)
 
     per_symbol: dict[str, dict] = {}
     portfolio_equity = pd.Series(dtype="float64")
