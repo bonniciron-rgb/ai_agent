@@ -1,25 +1,26 @@
-"""Unified backtest validation for all 5 shipped signals (A1, A2, B2, A3, B5).
+"""Unified backtest validation — v3 strategic pivot.
 
-Backtest v2 — fixes applied after first real-data run (2026-05-11):
-  - Extended window: 4 years (2022-2026) to include the 2022 bear market
-  - A1 retune: holding 20d (was 5d), threshold 3% (was 2%) — stops overtrading
-  - A2 retune: surprise_threshold 3% (was 5%) — widens the firing window
-  - B2 retune: min_consecutive_months=2 (was 3) — more signals, lower bar for streak
-  - A3 separate universe: mid-cap / regional names where officers make direct buys
-  - B5 separate universe: names with historically elevated short float (>= 15%)
-    NOTE: shortPercentOfFloat is a live snapshot from yfinance, not historised.
-    B5 backtesting reflects current short interest applied to historical prices.
-    The signal is designed for live trading; backtest is indicative only.
+Backtest v3 — strategic pivot after v1/v2 showed 0/5 signals beat SPY:
+  - DROPPED A3 (insider) — dynamic CIK lookup broken, mid-cap data sparse
+  - DROPPED B5 (short squeeze) — catastrophic falling-knife trap (-0.9 Sharpe)
+  - REVERTED B2 to min_consecutive_months=3 (v1 had Sharpe 1.51; relaxing degraded it)
+  - KEPT A1 retune from v2: holding 20d, threshold 3%
+  - KEPT A2 retune from v2: surprise_threshold=3%
+  - NEW: CompositeFactorSignal blending A1+A2+B2 with continuous scoring
+    -> the real test of whether multi-factor blend has edge vs SPY
 
-Pulls real market data directly from yfinance (prices, short interest),
-Finnhub (earnings calendar, analyst recommendations), and SEC EDGAR (Form 4
-insider transactions) — bypassing the DB-backed runner.
+Strategic reframe: not "alpha generator picking individual stocks" but
+"disciplined exposure manager modulating SPY allocation 50-150% based on
+factor signals". See etheratrading.md top-of-doc.
 
-Writes a consolidated JSON report to ``backtest_results.json`` (and stdout).
+Pulls real market data from yfinance (prices) + Finnhub (earnings + recs).
+SEC EDGAR + short interest fetches removed (A3/B5 deprecated).
+
+Writes ``backtest_results.json``.
 
 Requires:
-  - FINNHUB_API_KEY env var (for A2 / B2)
-  - Internet access to yfinance + SEC EDGAR (for A3 / B5)
+  - FINNHUB_API_KEY env var (for A2 / B2 / composite)
+  - Internet access to yfinance
 
 Usage::
 
@@ -45,16 +46,13 @@ from ai_agent.backtest.engine import run_backtest
 from ai_agent.backtest.metrics import equity_from_benchmark
 from ai_agent.backtest.metrics import summary as metrics_summary
 from ai_agent.data.finnhub_source import FinnhubSource
-from ai_agent.data.sec_edgar_source import SecEdgarSource
 from ai_agent.signals.analyst_revisions import (
     AnalystRevisionMomentumSignal,
     RecommendationSnapshot,
 )
-from ai_agent.signals.insider_buying import InsiderBuyingSignal
+from ai_agent.signals.composite import CompositeFactorSignal
 from ai_agent.signals.pead import EarningsEvent, PostEarningsDriftSignal
-from ai_agent.signals.runner import SYMBOL_TO_CIK
 from ai_agent.signals.sector_rs import SectorRelativeStrengthSignal
-from ai_agent.signals.short_interest import ShortInterestMomentumSignal
 from ai_agent.signals.strategy_adapter import SignalStrategy
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
@@ -85,34 +83,6 @@ SECTOR_MAP: dict[str, str] = {
 LARGE_CAP_SYMBOLS = sorted(SECTOR_MAP.keys())
 ETFS = sorted(set(SECTOR_MAP.values()))
 BENCHMARK = "SPY"
-
-# A3: mid-cap / regional names where officers make direct open-market buys.
-# Large-cap officers overwhelmingly receive options/RSUs, rarely buy shares.
-# Cohen-Malloy-Pomorski (2012) edge is strongest in this tier.
-A3_SYMBOLS = [
-    "RF",  # Regions Financial — regional bank officers buy on rate dips
-    "KEY",  # KeyCorp — same pattern
-    "FITB",  # Fifth Third Bancorp
-    "DVN",  # Devon Energy — E&P management historically buys on commodity dips
-    "APA",  # APA Corporation — same
-    "GPS",  # Gap Inc — retail, known insider purchase history
-    "M",  # Macy's — retail underdog, officer purchases in restructuring years
-    "KSS",  # Kohl's — same distressed-retail insider buying pattern
-]
-
-# B5: names with historically elevated short float.
-# shortPercentOfFloat is a live snapshot — applied to historical prices.
-# Signal is indicative for backtesting; designed for live use.
-B5_SYMBOLS = [
-    "BYND",  # Beyond Meat -- typically 40-50% short float
-    "PLUG",  # Plug Power -- hydrogen, typically 15-25% short float
-    "LCID",  # Lucid Group -- EV, typically 12-20% short float
-    "SOFI",  # SoFi Technologies -- fintech, typically 5-12% short float
-    "RIVN",  # Rivian -- EV, typically 8-15% short float
-    "TSLA",  # Tesla -- historically 15-25%, bridges large-cap and high-short tier
-]
-
-ALL_SYMBOLS_UNION = sorted(set(LARGE_CAP_SYMBOLS) | set(A3_SYMBOLS) | set(B5_SYMBOLS))
 
 END = date.today()
 START = END - timedelta(days=1460)  # 4 years — includes 2022 bear market
@@ -147,18 +117,6 @@ def fetch_prices(tickers: list[str], start: date, end: date) -> dict[str, pd.Dat
             logger.warning("yfinance extract failed for %s: %s", sym, exc)
     logger.info("yfinance: got %d / %d tickers", len(result), len(tickers))
     return result
-
-
-def fetch_short_interest(symbols: list[str]) -> dict[str, float]:
-    out: dict[str, float] = {}
-    for sym in symbols:
-        try:
-            info = yf.Ticker(sym).info
-            out[sym] = float(info.get("shortPercentOfFloat") or 0.0)
-        except Exception as exc:
-            logger.warning("short interest fetch failed for %s: %s — defaulting 0.0", sym, exc)
-            out[sym] = 0.0
-    return out
 
 
 def fetch_earnings(
@@ -218,37 +176,6 @@ def fetch_recommendations(
         snaps.sort(key=lambda s: s.period)
         out[sym] = snaps
         time.sleep(0.05)
-    return out
-
-
-def fetch_insider_events(symbols: list[str], lookback_days: int = 90) -> dict[str, list]:
-    sec_ua = os.environ.get(
-        "SEC_EDGAR_USER_AGENT",
-        "Ethera Trading research@etheratrading.example",
-    )
-    sec = SecEdgarSource(user_agent=sec_ua)
-    out: dict[str, list] = {}
-    for sym in symbols:
-        cik = SYMBOL_TO_CIK.get(sym.upper()) or SecEdgarSource.symbol_to_cik(sym)
-        if not cik:
-            logger.warning("No CIK mapping for %s — skipping insider data", sym)
-            continue
-        try:
-            filings = sec.recent_form4_filings(cik, days_back=lookback_days)
-        except Exception as exc:
-            logger.warning("SEC filings list failed for %s: %s", sym, exc)
-            continue
-        events = []
-        for f in filings:
-            try:
-                events.extend(sec.parse_form4_filing(f["accession_number"], cik))
-            except Exception as exc:
-                logger.warning("SEC parse %s %s: %s", sym, f["accession_number"], exc)
-                continue
-            time.sleep(0.15)
-        events.sort(key=lambda e: e.transaction_date)
-        out[sym] = events
-        logger.info("SEC: %d Form 4 events for %s (CIK %s)", len(events), sym, cik)
     return out
 
 
@@ -329,17 +256,15 @@ def main() -> int:
     logger.info("=" * 70)
     logger.info("Ethera Trading — unified signal backtest v2")
     logger.info(
-        "Large-cap: %d  A3 mid-cap: %d  B5 high-short: %d  period %s → %s",
+        "Universe: %d large-cap symbols, period %s → %s",
         len(LARGE_CAP_SYMBOLS),
-        len(A3_SYMBOLS),
-        len(B5_SYMBOLS),
         START,
         END,
     )
     logger.info("=" * 70)
 
-    # 1. Prices — one download covers all universes
-    all_tickers = sorted(set(ALL_SYMBOLS_UNION) | set(ETFS) | {BENCHMARK})
+    # 1. Prices for all stocks + sector ETFs + benchmark
+    all_tickers = sorted(set(LARGE_CAP_SYMBOLS) | set(ETFS) | {BENCHMARK})
     price_data = fetch_prices(all_tickers, START, END)
 
     # 2. Benchmark
@@ -373,28 +298,16 @@ def main() -> int:
     else:
         logger.warning("FINNHUB_API_KEY not set — A2 / B2 backtests will have no data")
 
-    # 5. SEC EDGAR Form 4 (A3 — mid-cap universe only)
-    logger.info("SEC EDGAR: fetching Form 4 filings for A3 mid-cap universe ...")
-    insider_by_sym = fetch_insider_events(A3_SYMBOLS, lookback_days=1460)
-
-    # 6. Short interest snapshots (B5 high-short universe)
-    logger.info("yfinance: fetching short interest snapshots for B5 universe ...")
-    short_data = fetch_short_interest(B5_SYMBOLS)
-    logger.info(
-        "Short interest: %s",
-        {s: f"{v:.1%}" for s, v in short_data.items()},
-    )
-
-    # 7. Run signals
+    # 5. Run individual signals + composite
     reports: list[dict] = []
 
     logger.info("-" * 70)
-    logger.info("A1: Sector Relative Strength (retune: 20d hold, 3%% threshold)")
+    logger.info("A1: Sector Relative Strength (20d hold, 3%% threshold)")
     a1 = SectorRelativeStrengthSignal(
         sector_map=SECTOR_MAP,
         sector_prices=sector_prices,
         lookback=20,
-        threshold=0.03,  # raised from 0.02 — reduces false positives
+        threshold=0.03,
     )
     reports.append(
         run_signal_backtest(
@@ -403,10 +316,10 @@ def main() -> int:
     )
 
     logger.info("-" * 70)
-    logger.info("A2: Post-Earnings Drift (retune: 3%% surprise threshold)")
+    logger.info("A2: Post-Earnings Drift (3%% surprise threshold)")
     a2 = PostEarningsDriftSignal(
         earnings_events=earnings_by_sym,
-        surprise_threshold=0.03,  # lowered from 0.05 — widens trigger
+        surprise_threshold=0.03,
     )
     reports.append(
         run_signal_backtest(
@@ -415,10 +328,10 @@ def main() -> int:
     )
 
     logger.info("-" * 70)
-    logger.info("B2: Analyst Revision Momentum (retune: 2 consecutive months)")
+    logger.info("B2: Analyst Revision Momentum (3 consecutive months -- reverted from v2)")
     b2 = AnalystRevisionMomentumSignal(
         recommendations=recs_by_sym,
-        min_consecutive_months=2,  # lowered from 3 — more signals, still requires trend
+        # min_consecutive_months defaults to 3 -- v1 config with Sharpe 1.51
     )
     reports.append(
         run_signal_backtest(
@@ -432,33 +345,29 @@ def main() -> int:
     )
 
     logger.info("-" * 70)
-    logger.info("A3: Insider Buying — mid-cap universe (RF, KEY, FITB, DVN, APA, GPS, M, KSS)")
-    a3 = InsiderBuyingSignal(insider_events=insider_by_sym)
+    logger.info("CompositeFactorSignal: equal-weight blend of A1 + A2 + B2")
+    composite = CompositeFactorSignal(
+        sub_signals=[a1, a2, b2],
+        name_suffix="equal_weight",
+    )
     reports.append(
         run_signal_backtest(
-            a3, A3_SYMBOLS, price_data, bench_close, label="A3_insider", holding_days=20
+            composite,
+            LARGE_CAP_SYMBOLS,
+            price_data,
+            bench_close,
+            label="Composite_equal",
+            holding_days=20,
         )
     )
 
-    logger.info("-" * 70)
-    logger.info("B5: Short Squeeze — high-short universe (BYND, PLUG, LCID, SOFI, RIVN, TSLA)")
-    b5 = ShortInterestMomentumSignal(short_data=short_data, min_short_pct=0.15)
-    reports.append(
-        run_signal_backtest(
-            b5, B5_SYMBOLS, price_data, bench_close, label="B5_short_squeeze", holding_days=10
-        )
-    )
-
-    # 8. Output
+    # 6. Output
     output = {
         "as_of": END.isoformat(),
-        "version": "v2",
+        "version": "v3",
+        "strategy": "exposure_manager",
         "period": [START.isoformat(), END.isoformat()],
-        "universes": {
-            "large_cap": LARGE_CAP_SYMBOLS,
-            "a3_midcap": A3_SYMBOLS,
-            "b5_high_short": B5_SYMBOLS,
-        },
+        "universe": LARGE_CAP_SYMBOLS,
         "benchmark": {
             "symbol": BENCHMARK,
             "sharpe": round(bench_metrics.get("sharpe") or 0.0, 4),
@@ -469,12 +378,6 @@ def main() -> int:
             "price_symbols": len(price_data),
             "earnings_symbols": sum(1 for v in earnings_by_sym.values() if v),
             "recommendation_symbols": sum(1 for v in recs_by_sym.values() if v),
-            "insider_symbols": sum(1 for v in insider_by_sym.values() if v),
-            "short_interest_symbols": sum(1 for v in short_data.values() if v > 0),
-            "b5_note": (
-                "shortPercentOfFloat is a live snapshot. "
-                "B5 backtest applies current short interest to historical prices — indicative only."
-            ),
         },
         "signals": reports,
     }
