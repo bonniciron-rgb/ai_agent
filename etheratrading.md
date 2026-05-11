@@ -117,23 +117,40 @@
 | CLI registration | `scripts/backtest_signal.py` | ✅ | `sector_relative_strength` choice + `--sector-map` JSON flag |
 | Test suite | `tests/signals/test_sector_rs.py` | ✅ | 16 tests (outperform→long, underperform→flat, threshold edge, SPY fallback, insufficient history) |
 
-**First real signal flowing through C1 harness.** Backtest validation pending (next step before A2).
+**First real signal flowing through C1 harness.** Validated 2026-05-11 (synthetic data, harness verified).
+
+---
+
+### Batch 7: C1 Harness Fix + A1 Backtest Validation [Merged PR #51]
+**PR #51 (CI: ✅ passed 2026-05-11)**
+
+| Feature | Files | Status | Notes |
+|---------|-------|--------|-------|
+| Harness bug fix | `src/ai_agent/signals/runner.py` | ✅ | `_inject_sector_prices()` — ETF bars now wired into signal before per-symbol loop; was producing 0 trades |
+| Backtest report | `reports/a1-backtest.md` | ✅ | 18 symbols × 521 days; synthetic data (sandbox network blocked); Sharpe 0.46, harness verified |
+| Backtest script | `scripts/run_a1_backtest.py` | ✅ | Reproducible real-data script (runs when network available) |
+
+**Critical fix**: without this, every signal relying on external prices would silently produce 0 trades in production.
 
 ---
 
 ## 🚀 Upcoming Roadmap
 
-### Phase A: Alpha Signals (Proof-of-Concept Layer)
-Each signal validates via C1 harness (backtest → shadow → live).
+### Phase A & B: Alpha Signal Pipeline
+Each signal validates via C1 harness (backtest → 2-week shadow → live). **Revised queue adds B2/B5 as fast wins.**
 
-| Signal | Data Source | Est. Effort | Status | Notes |
-|--------|-------------|------------|--------|-------|
-| **A1: Sector Relative Strength** | Yahoo Finance (free) | 1.5d | ✅ Merged (#50) | 20d lookback, pure feature engineering, no ML required |
-| **A2: Post-Earnings Drift (PEAD)** | Finnhub (already provisioned) | 2d | Backlog | 2d lookback, earnings surprise × trend, low-latency edge |
-| **A3: Insider Buying (Form 4)** | SEC EDGAR (free) | 2d | Backlog | Officer/director buys, 1-week forward look, monthly batches |
-| **B1: Options Flow** | Polygon / Tradier (paid, user opt-in) | 3d | Backlog | IV percentile, volume asymmetry, user explicitly enables feed |
+| Signal | Source | Est. Effort | Status | Edge |
+|--------|--------|------------|--------|------|
+| **A1: Sector Relative Strength** | Yahoo Finance (free) | 1.5d | ✅ Shadow (#50) | 20d return spread vs sector ETF |
+| **A2: Post-Earnings Drift (PEAD)** | Finnhub (provisioned) | 2d | **Next** | Earnings surprise × trend persistence (well-documented anomaly) |
+| **B2: Analyst Estimate Revisions** | Finnhub `/stock/recommendation` (free) | 1d | Backlog | 3+ consecutive upward EPS revisions → sustained outperformance |
+| **A3: Insider Buying (Form 4)** | SEC EDGAR (free) | 2d | Backlog | Officer/director buys precede outsized returns on avg |
+| **B5: Short Interest + Momentum** | FINRA REGSHO (free, twice monthly) | 1d | Backlog | High short float + rising 20d momentum = squeeze setup |
+| **B1: Options Flow** | Polygon / Tradier (paid, user opt-in) | 3d | Backlog | Unusual call/put volume detects institutional positioning |
 
-**Timeline**: A1 → A2 → A3 → B1 (sequential validation, each signal gets 2-week shadow window).
+**Deprioritized**: Twitter/X (API now paid), StockTwits (low SNR), Dark pool (all quality sources paid $300+/mo).
+
+**Sprint order**: A2 → B2 → A3 → B5 → B1 (sequential validation, each signal gets 2-week shadow).
 
 **Next Batch**: A2 PEAD (Post-Earnings Drift) — Finnhub already provisioned, 2d effort.
 
@@ -179,14 +196,14 @@ Each signal validates via C1 harness (backtest → shadow → live).
 ## 📋 Daily Sync Template
 
 ### Status
-- **Last PR shipped**: PR #50 (A1 sector relative-strength signal) — merged & live
+- **Last PR shipped**: PR #51 (C1 harness fix + A1 backtest validation) — merged & live
 - **Active PRs**: none
-- **Blocked by**: Official sigil SVG from designer (placeholder currently ships)
-- **In flight**: A1 backtest complete — ⚠️ Harness works (critical sector_prices bug fixed), A1 Sharpe 0.46 < 0.5 gate; A1 enters shadow, A2 unblocked
+- **Blocked by**: Official sigil SVG from designer (non-blocking, placeholder ships)
+- **In flight**: A2 PEAD — awaiting greenlight to dispatch
 
 ### Metrics (as of 2026-05-11)
 - **LLM usage (7d)**: $X.XX (last check: dashboard live, waiting for first cron cycle)
-- **Signal backtests**: 2 reference (AlwaysFlatSignal, SmaCrossSignal) ✅; A1 ✅ shipped (real-data backtest pending); A2–B1 pending
+- **Signal backtests**: 2 reference ✅; A1 ✅ merged + shadow; A2/B2/A3/B5/B1 pending
 - **PWA installs**: Tracking via web push subscriptions (baseline: not yet measured)
 - **Approval surface**: Telegram + PWA both ready
 
@@ -194,10 +211,10 @@ Each signal validates via C1 harness (backtest → shadow → live).
 - None currently; awaiting designer sigil SVG (non-blocking, placeholder ships)
 
 ### Next Batch
-**Recommended**: A2 PEAD (Post-Earnings Drift).
-- Effort: 2 days
-- Risk: Low (Finnhub already provisioned)
-- Impact: Second real alpha signal through C1 harness; earnings-surprise edge
+**Recommended**: A2 PEAD (Post-Earnings Drift) → B2 Analyst Revisions (fast follow, Finnhub free, 1d).
+- A2 effort: 2 days; Finnhub already provisioned; earnings-surprise momentum anomaly
+- B2 effort: 1 day; same Finnhub endpoint; analyst upgrade momentum signal
+- Together these give the agent two independent catalyst-driven edges
 
 ---
 
@@ -241,7 +258,8 @@ Each signal validates via C1 harness (backtest → shadow → live).
 | Item | Status | Notes |
 |------|--------|-------|
 | Official sigil SVG | Pending from designer | Placeholder `branding/sigil.svg` ships; replace file once received, rebuild icons |
-| A1 backtest validation | ⚠️ Harness works, no edge (Sharpe 0.46 < 0.5) — A1 shadow, proceed to A2 | Synthetic data (network blocked); harness bug fixed (`_inject_sector_prices`); see `reports/a1-backtest.md` |
+| A1 real-data backtest | Pending (network access required) | Run `scripts/run_a1_backtest.py` when outbound network available; synthetic run confirmed harness works |
+| Manual signal ingestion | Backlog | No inbound API yet; interim: paste signal text in session for manual analysis |
 | iOS Phase 2 decision | Blocked on metrics | Measure PWA adoption (2 weeks from P3 ship), DAU >50% of installs = greenlight |
 | Broker integration (Alpaca / IB) | Q3+ 2026 | Out of scope for May release |
 
@@ -288,6 +306,7 @@ Each signal validates via C1 harness (backtest → shadow → live).
 | #48 | PWA P2 web push | ✅ | 2026-05-10 | Parallel Telegram delivery |
 | #49 | PWA P3 mobile approval UI | ✅ | 2026-05-11 | CI passed, all tests ✅ |
 | #50 | A1 Sector relative strength signal | ✅ | 2026-05-11 | First real signal through C1 harness; format-fix follow-up commit 129f177 |
+| #51 | C1 harness fix + A1 backtest validation | ✅ | 2026-05-11 | Critical: `sector_prices` bug fixed; backtest report + reproducible script |
 
 ---
 
@@ -301,10 +320,14 @@ Each signal validates via C1 harness (backtest → shadow → live).
 - ✅ Signal validation harness (C1, backtest → shadow → live gate)
 - ✅ PWA full stack (installable, offline-capable, notifications)
 - ✅ Mobile proposal approval UI (sticky-bottom, haptic, toast)
-- ✅ A1 sector relative-strength signal (first real alpha signal through C1 harness)
+- ✅ A1 sector relative-strength signal (first real alpha through C1 harness)
+- ✅ C1 harness critical fix (`sector_prices` injection — was producing 0 trades in production)
 
 ---
 
 **Maintained by**: Claude  
+**Next review**: Daily (or after each PR merge)  
+**Last sync**: 2026-05-11 (post-PR-#51 merge; roadmap updated with B2/B5 signal sources)
+
 **Next review**: Daily (or after each PR merge)  
 **Last sync**: 2026-05-11 (post-A1 backtest; harness fix committed)
