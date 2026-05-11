@@ -251,6 +251,44 @@ Each signal validates via C1 harness (backtest → 2-week shadow → live). **Re
 - **Notifications**: Web Push API (push event → notificationclick handler)
 - **Icons**: Auto-generated at build time from `branding/sigil.svg` (one-file update)
 
+### Daily Operations Schedule
+- **Daily agent loop**: `06:30 UTC, Mon–Fri` (US pre-market) — `.github/workflows/daily.yml`
+  - Entry: `python -m ai_agent.loop.daily_loop`
+  - Steps: init DB → load watchlist → halt check → ingest bars → build T212 client → run Claude agent → risk-rail filter → persist proposals → send Telegram digest
+  - Manual trigger: GitHub Actions `workflow_dispatch` with optional `--dry-run`
+  - Local trigger: `python -m ai_agent.loop.daily_loop --dry-run`
+- **Daily digest (cost + proposals)**: shares the same cron; pushes to Telegram + web-push
+- **Macro regime snapshot**: `.github/workflows/macro-regime.yml` (separate cron, refreshes regime classifier daily)
+- **Shadow MTM**: `.github/workflows/shadow-mtm.yml` (marks-to-market shadow positions for validation accuracy)
+
+### Signal Source Research (Lead Architect Notes — 2026-05-11)
+
+**Constraint**: The agent ingests only **programmatic, machine-readable** signal sources. Video/audio channels (e.g., JdubTrades_Telegram) cannot be parsed natively — would need transcription pipeline or manual screenshot OCR.
+
+**Tier 1 — On Roadmap (free or already provisioned)**
+| Signal | Source | Edge basis |
+|--------|--------|------------|
+| A2: Post-earnings drift (PEAD) | Finnhub (provisioned) | Earnings surprise × trend persistence — academic anomaly (Bernard & Thomas) |
+| A3: Insider Form 4 | SEC EDGAR (free) | Officer/director buys precede outsized returns (Cohen, Malloy, Pomorski) |
+| B2: Analyst estimate revisions | Finnhub `/stock/recommendation` (free) | 3+ consecutive upward EPS revisions → 3–12mo outperformance (Hawkins et al.) |
+| B5: Short interest + momentum | FINRA REGSHO (free, biweekly) | High short float + positive 20d momentum = squeeze setup |
+| B1: Options flow | Polygon/Tradier (paid, opt-in) | Unusual call/put volume detects institutional positioning before price moves |
+
+**Tier 2 — Considered, deprioritized**
+| Source | Reason to skip |
+|--------|----------------|
+| Twitter/X sentiment | API gated behind $100+/mo paywall, coverage degraded |
+| StockTwits | Free but high retail noise, low signal-to-noise |
+| Dark pool / block trades | All quality sources paid ($300+/mo) |
+| Bloomberg ESI | Enterprise pricing |
+| 13F institutional positioning | 45-day filing lag limits short-term value (parking lot for future) |
+
+**Tier 3 — Manual / external channels**
+| Source | Status |
+|--------|--------|
+| External Telegram trading channels (e.g., JdubTrades) | Manual paste-and-analyze; video-only content not parseable. Future: build inbound webhook endpoint accepting structured payload (symbol, side, levels, source tag) |
+| Discord / private Slack signal rooms | Same as above — manual interim, webhook future |
+
 ---
 
 ## 📍 Outstanding Items
@@ -259,7 +297,8 @@ Each signal validates via C1 harness (backtest → 2-week shadow → live). **Re
 |------|--------|-------|
 | Official sigil SVG | Pending from designer | Placeholder `branding/sigil.svg` ships; replace file once received, rebuild icons |
 | A1 real-data backtest | Pending (network access required) | Run `scripts/run_a1_backtest.py` when outbound network available; synthetic run confirmed harness works |
-| Manual signal ingestion | Backlog | No inbound API yet; interim: paste signal text in session for manual analysis |
+| Manual signal ingestion API | Backlog | No inbound API yet. Spec: `POST /api/proposals/manual` with `{symbol, side, entry, stop, target, rationale, source}` — flows through same approval UI. ~3hr Sonnet sprint when prioritized |
+| Video signal channel parsing | Out of scope | External channels publishing video-only (e.g., JdubTrades) cannot be parsed; interim is screenshot OCR or manual transcription |
 | iOS Phase 2 decision | Blocked on metrics | Measure PWA adoption (2 weeks from P3 ship), DAU >50% of installs = greenlight |
 | Broker integration (Alpaca / IB) | Q3+ 2026 | Out of scope for May release |
 
@@ -327,7 +366,7 @@ Each signal validates via C1 harness (backtest → 2-week shadow → live). **Re
 
 **Maintained by**: Claude  
 **Next review**: Daily (or after each PR merge)  
-**Last sync**: 2026-05-11 (post-PR-#51 merge; roadmap updated with B2/B5 signal sources)
+**Last sync**: 2026-05-11 (post-PR-#51 merge; roadmap updated with B2/B5; daily ops schedule + signal source research added)
 
 **Next review**: Daily (or after each PR merge)  
 **Last sync**: 2026-05-11 (post-A1 backtest; harness fix committed)
