@@ -6,6 +6,7 @@ import json
 import logging
 from dataclasses import dataclass, field
 from datetime import date
+
 import pandas as pd
 from sqlmodel import Session
 
@@ -27,7 +28,7 @@ def _inject_sector_prices(signal: Signal, days_back: int, ref_date: date) -> Non
     the runner does not need to know which ETFs are required before construction.
     """
     # Import here to avoid a circular import; sector_rs imports signals.base, not runner.
-    from ai_agent.signals.sector_rs import SectorRelativeStrengthSignal  # noqa: PLC0415
+    from ai_agent.signals.sector_rs import SectorRelativeStrengthSignal
 
     if not isinstance(signal, SectorRelativeStrengthSignal):
         return
@@ -43,11 +44,11 @@ def _inject_sector_prices(signal: Signal, days_back: int, ref_date: date) -> Non
     for etf in etf_tickers:
         bars = bars_from_db(etf, days_back=days_back, ref_date=ref_date)
         if not bars:
-            logger.warning("No DB bars found for sector ETF %s — signal will fall back to flat", etf)
+            logger.warning(
+                "No DB bars found for sector ETF %s — signal will fall back to flat", etf
+            )
             continue
-        injected[etf] = pd.Series(
-            {b.trading_date: float(b.close) for b in bars}
-        ).sort_index()
+        injected[etf] = pd.Series({b.trading_date: float(b.close) for b in bars}).sort_index()
         logger.info("Injected %d price rows for sector ETF %s", len(injected[etf]), etf)
 
     signal.sector_prices = injected
