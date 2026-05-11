@@ -24,6 +24,7 @@ from ai_agent.db.engine import init_schema
 from ai_agent.signals import (
     AlwaysFlatSignal,
     AnalystRevisionMomentumSignal,
+    InsiderBuyingSignal,
     PostEarningsDriftSignal,
     SectorRelativeStrengthSignal,
     SmaCrossSignal,
@@ -34,6 +35,7 @@ from ai_agent.signals import (
 REGISTRY = {
     "always_flat": AlwaysFlatSignal,
     "analyst_revision_momentum": AnalystRevisionMomentumSignal,
+    "insider_buying": InsiderBuyingSignal,
     "post_earnings_drift": PostEarningsDriftSignal,
     "sector_relative_strength": SectorRelativeStrengthSignal,
     "sma_cross": SmaCrossSignal,
