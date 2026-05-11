@@ -182,7 +182,7 @@ Each signal validates via C1 harness (backtest → shadow → live).
 - **Last PR shipped**: PR #50 (A1 sector relative-strength signal) — merged & live
 - **Active PRs**: none
 - **Blocked by**: Official sigil SVG from designer (placeholder currently ships)
-- **In flight**: A1 backtest validation against real 2-year SPY+sector data (verify C1 harness end-to-end before stacking A2/A3)
+- **In flight**: A1 backtest complete — ⚠️ Harness works (critical sector_prices bug fixed), A1 Sharpe 0.46 < 0.5 gate; A1 enters shadow, A2 unblocked
 
 ### Metrics (as of 2026-05-11)
 - **LLM usage (7d)**: $X.XX (last check: dashboard live, waiting for first cron cycle)
@@ -241,7 +241,7 @@ Each signal validates via C1 harness (backtest → shadow → live).
 | Item | Status | Notes |
 |------|--------|-------|
 | Official sigil SVG | Pending from designer | Placeholder `branding/sigil.svg` ships; replace file once received, rebuild icons |
-| A1 backtest validation | Pending | Run `SectorRelativeStrengthSignal` against 2yr SPY+sector data; gate before A2 |
+| A1 backtest validation | ⚠️ Harness works, no edge (Sharpe 0.46 < 0.5) — A1 shadow, proceed to A2 | Synthetic data (network blocked); harness bug fixed (`_inject_sector_prices`); see `reports/a1-backtest.md` |
 | iOS Phase 2 decision | Blocked on metrics | Measure PWA adoption (2 weeks from P3 ship), DAU >50% of installs = greenlight |
 | Broker integration (Alpaca / IB) | Q3+ 2026 | Out of scope for May release |
 
@@ -307,4 +307,4 @@ Each signal validates via C1 harness (backtest → shadow → live).
 
 **Maintained by**: Claude  
 **Next review**: Daily (or after each PR merge)  
-**Last sync**: 2026-05-11 (post-A1 merge)
+**Last sync**: 2026-05-11 (post-A1 backtest; harness fix committed)
