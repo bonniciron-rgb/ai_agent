@@ -8,6 +8,7 @@ import {
   type ProposalFilters,
   type ProposalStatus,
 } from "@/lib/queries";
+import { MobileProposalCard } from "./MobileProposalCard";
 
 export const dynamic = "force-dynamic";
 
@@ -107,11 +108,33 @@ export default async function ProposalsPage({
             <p className="font-medium">Database query failed</p>
             <p className="mt-1 font-mono text-xs text-rose-300/80">{dbError}</p>
           </div>
+        ) : rows.length === 0 ? (
+          <div className="mt-6 rounded-lg border border-zinc-800">
+            <p className="p-6 text-sm text-zinc-500">No proposals yet.</p>
+          </div>
         ) : (
-          <div className="mt-6 overflow-hidden rounded-lg border border-zinc-800">
-            {rows.length === 0 ? (
-              <p className="p-6 text-sm text-zinc-500">No proposals yet.</p>
-            ) : (
+          <>
+            {/* Mobile card list */}
+            <div className="mt-6 space-y-3 sm:hidden">
+              {rows.map((p) => (
+                <MobileProposalCard
+                  key={p.id}
+                  id={p.id}
+                  symbol={p.symbol}
+                  side={p.side}
+                  quantity={String(p.quantity)}
+                  limitPrice={String(p.limit_price)}
+                  stopPrice={p.stop_price ? String(p.stop_price) : null}
+                  rationale={p.rationale}
+                  confidence={p.confidence}
+                  status={p.status}
+                  createdAt={String(p.created_at)}
+                />
+              ))}
+            </div>
+
+            {/* Desktop table */}
+            <div className="mt-6 hidden overflow-hidden rounded-lg border border-zinc-800 sm:block">
               <table className="w-full text-sm">
                 <thead className="bg-zinc-900/50 text-xs uppercase tracking-wider text-zinc-500">
                   <tr>
@@ -161,8 +184,8 @@ export default async function ProposalsPage({
                   ))}
                 </tbody>
               </table>
-            )}
-          </div>
+            </div>
+          </>
         )}
       </main>
     </>
