@@ -109,6 +109,26 @@ class FinnhubSource:
                 raise DataSourceError(f"finnhub earnings row malformed: {row}") from e
         return out
 
+    def recommendation_trends(self, symbol: str) -> list[dict]:
+        """Return the analyst recommendation trend history for *symbol*.
+
+        Calls ``GET /stock/recommendation`` and returns the raw list of period
+        dicts, each containing ``period``, ``strongBuy``, ``buy``, ``hold``,
+        ``sell``, ``strongSell``.  Returns an empty list when Finnhub returns
+        no data (e.g. no analyst coverage).
+
+        Parameters
+        ----------
+        symbol:
+            Equity ticker (case-insensitive; upper-cased before dispatch).
+        """
+        payload = self._get(
+            "/stock/recommendation",
+            {"symbol": symbol.upper()},
+        )
+        rows: list[dict] = payload if isinstance(payload, list) else []
+        return rows
+
     def company_news(self, symbol: str, *, start: date, end: date) -> list[NewsItem]:
         if start > end:
             raise ValueError(f"start {start} is after end {end}")
