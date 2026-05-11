@@ -150,7 +150,20 @@
 
 ---
 
-### Batch 11: B5 Short Interest + Momentum Signal [Merged PR #55]
+### Batch 12: Unified Real-Data Backtest Infrastructure [Merged PR #56]
+**PR #56 (CI: ✅ passed 2026-05-11)**
+
+| Feature | Files | Status | Notes |
+|---------|-------|--------|-------|
+| Unified backtest script | `scripts/run_all_backtests.py` | ✅ | Pulls 2y of yfinance OHLCV + short interest, Finnhub earnings + recs, SEC EDGAR Form 4; runs A1/A2/B2/A3/B5 against same 17-symbol universe + SPY benchmark; writes `backtest_results.json` |
+| GitHub Actions workflow | `.github/workflows/signal-backtests.yml` | ✅ | `workflow_dispatch` + monthly cron; uploads `backtest_results.json` artifact (90-day retention); prints summary table per run |
+| Shared data fetch | (inside script) | ✅ | One yfinance call covers prices + sector ETFs + benchmark; one Finnhub pass covers earnings + recs; one SEC pass covers all CIKs — eliminates redundant network for cross-signal validation |
+
+**Validates the 5 shipped signals end-to-end on real market data.** Needs `FINNHUB_API_KEY` secret. First run produces portfolio Sharpe/CAGR/alpha-vs-SPY + per-symbol breakdowns for every signal in a single JSON artifact.
+
+---
+
+
 **PR #55 (CI: ✅ passed 2026-05-11)**
 
 | Feature | Files | Status | Notes |
@@ -214,7 +227,9 @@ Each signal validates via C1 harness (backtest → 2-week shadow → live). **Re
 
 **Sprint order**: A2 → B2 → A3 → B5 → B1 (sequential validation, each signal gets 2-week shadow).
 
-**Next Batch**: A3 Insider Buying (Form 4) — SEC EDGAR free, 2d effort.
+**Next Batch**: Operational hardening (dynamic CIK lookup, batched Finnhub, resilience) + interpret first real-data backtest results (PR #56 workflow).
+
+**Decision pending**: T212 retail crowding rejected (low signal-to-noise risk to algo). MarketWatch rejected (editorial commentary, already-priced). B1 options flow on hold pending paid feed budget.
 
 ---
 
@@ -258,10 +273,10 @@ Each signal validates via C1 harness (backtest → 2-week shadow → live). **Re
 ## 📋 Daily Sync Template
 
 ### Status
-- **Last PR shipped**: PR #54 (A3 Insider Buying) — merged & live
+- **Last PR shipped**: PR #56 (unified real-data backtest infra) — merged & live
 - **Active PRs**: none
-- **Blocked by**: Official sigil SVG from designer (non-blocking, placeholder ships)
-- **In flight**: B1 Options Flow — awaiting greenlight (paid feed / user opt-in required)
+- **Blocked by**: `FINNHUB_API_KEY` repo secret + manual workflow trigger for first real-data backtest run
+- **In flight**: Operational hardening (dynamic CIK, batched Finnhub, fallback resilience) + interpreting first backtest artifact
 
 ### Metrics (as of 2026-05-11)
 - **LLM usage (7d)**: $X.XX (last check: dashboard live, waiting for first cron cycle)
@@ -273,10 +288,11 @@ Each signal validates via C1 harness (backtest → 2-week shadow → live). **Re
 - None currently; awaiting designer sigil SVG (non-blocking, placeholder ships)
 
 ### Next Batch
-**Recommended**: B1 Options Flow — Polygon/Tradier paid feed, user opt-in required.
-- B1 effort: 3 days; requires a paid options data subscription (Polygon or Tradier); unusual call/put volume detects institutional positioning before price moves
-- B5 is now in PR #55 (draft); after merge, B1 is the next logical validator through C1
-- **User action required for B1**: confirm which options data provider to use and whether paid subscription is approved
+**Recommended**: Operational hardening — runs in parallel with first backtest artifact review.
+- Dynamic CIK lookup via `company_tickers.json` (removes hardcoded 30-symbol map limit)
+- Batched Finnhub requests (reduce API calls during signal injection)
+- yfinance fallback to Stooq when host unreachable (already partial in B5; extend to A1 price fetch)
+- **User action required**: set `FINNHUB_API_KEY` repo secret + trigger `signal-backtests` workflow from Actions tab so we get first portfolio Sharpe / CAGR / alpha numbers.
 
 ---
 
