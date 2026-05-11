@@ -150,6 +150,22 @@
 
 ---
 
+### Batch 10: A3 Insider Buying (Form 4) Signal [Open PR #54]
+**PR #54 (draft, CI pending)**
+
+| Feature | Files | Status | Notes |
+|---------|-------|--------|-------|
+| Signal implementation | `src/ai_agent/signals/insider_buying.py` | 🔵 | `InsiderBuyingSignal` + `InsiderBuy` dataclass; long when ≥2 distinct officers/directors buy ≥$50k combined within 90d; filters code==P, direct==D, officer OR director |
+| SEC EDGAR client | `src/ai_agent/data/sec_edgar_source.py` | 🔵 | `SecEdgarSource` — no API key; User-Agent with email required (SEC policy); fetches submissions JSON + parses Form 4 XML `nonDerivativeTransaction` rows |
+| EDGAR injection helper | `src/ai_agent/signals/runner.py` | 🔵 | `_inject_insider_events()` + `SYMBOL_TO_CIK` Phase-1 dict (30 large-caps); wired into `backtest_signal()` alongside A1/A2/B2 injectors |
+| `__init__.py` export | `src/ai_agent/signals/__init__.py` | 🔵 | `InsiderBuy`, `InsiderBuyingSignal` added to public API |
+| CLI registration | `scripts/backtest_signal.py` | 🔵 | `insider_buying` choice in `REGISTRY` |
+| Test suite | `tests/signals/test_insider_buying.py` | 🔵 | 31 tests across 8 classes (sufficient buying, single insider, low value, stale events, non-buy codes, indirect ownership, 10%-owner exclusion, custom thresholds, empty data, attributes) |
+
+**Fourth real signal through C1.** Based on Cohen, Malloy & Pomorski (2012) insider buying anomaly. SEC EDGAR free API integrated via `_inject_insider_events()`. Phase-1 CIK map hardcoded for 30 large-caps; dynamic lookup is Phase-2 follow-up.
+
+---
+
 ### Batch 8: A2 Post-Earnings Drift (PEAD) Signal [Merged PR #52]
 **PR #52 (CI: ✅ passed 2026-05-11)**
 
@@ -175,7 +191,7 @@ Each signal validates via C1 harness (backtest → 2-week shadow → live). **Re
 | **A1: Sector Relative Strength** | Yahoo Finance (free) | 1.5d | ✅ Shadow (#50) | 20d return spread vs sector ETF |
 | **A2: Post-Earnings Drift (PEAD)** | Finnhub (provisioned) | 2d | ✅ Merged (#52) | Earnings surprise × trend persistence (well-documented anomaly) |
 | **B2: Analyst Estimate Revisions** | Finnhub `/stock/recommendation` (free) | 1d | ✅ Merged (#53) | 3+ consecutive upward EPS revisions → sustained outperformance |
-| **A3: Insider Buying (Form 4)** | SEC EDGAR (free) | 2d | Backlog | Officer/director buys precede outsized returns on avg |
+| **A3: Insider Buying (Form 4)** | SEC EDGAR (free) | 2d | Open PR #54 | Officer/director buys precede outsized returns on avg |
 | **B5: Short Interest + Momentum** | FINRA REGSHO (free, twice monthly) | 1d | Backlog | High short float + rising 20d momentum = squeeze setup |
 | **B1: Options Flow** | Polygon / Tradier (paid, user opt-in) | 3d | Backlog | Unusual call/put volume detects institutional positioning |
 
@@ -228,13 +244,13 @@ Each signal validates via C1 harness (backtest → 2-week shadow → live). **Re
 
 ### Status
 - **Last PR shipped**: PR #53 (B2 analyst revision momentum) — merged & live
-- **Active PRs**: none
+- **Active PRs**: PR #54 (A3 insider buying) — draft, CI pending
 - **Blocked by**: Official sigil SVG from designer (non-blocking, placeholder ships)
-- **In flight**: A3 Insider Form 4 — awaiting greenlight
+- **In flight**: A3 Insider Form 4 — PR #54 open (draft)
 
 ### Metrics (as of 2026-05-11)
 - **LLM usage (7d)**: $X.XX (last check: dashboard live, waiting for first cron cycle)
-- **Signal backtests**: 2 reference ✅; A1 ✅ merged + shadow; A2 ✅ merged + shadow; B2 ✅ merged + shadow; A3/B5/B1 pending
+- **Signal backtests**: 2 reference ✅; A1 ✅ merged + shadow; A2 ✅ merged + shadow; B2 ✅ merged + shadow; A3 🔵 PR #54; B5/B1 pending
 - **PWA installs**: Tracking via web push subscriptions (baseline: not yet measured)
 - **Approval surface**: Telegram + PWA both ready
 
@@ -242,9 +258,9 @@ Each signal validates via C1 harness (backtest → 2-week shadow → live). **Re
 - None currently; awaiting designer sigil SVG (non-blocking, placeholder ships)
 
 ### Next Batch
-**Recommended**: A3 Insider Buying (Form 4) — SEC EDGAR free, 2d effort.
-- A3 effort: 2 days; no new data dependencies; insider buy signals from officer/director Form 4 filings
-- B2 is now in PR #53 (draft); after merge, A3 is the logical next validator through C1
+**Recommended**: B5 Short Interest + Momentum — FINRA REGSHO free, 1d effort.
+- B5 effort: 1 day; no new data dependencies; high short float + rising 20d momentum = squeeze setup
+- A3 is now in PR #54 (draft); after merge, B5 is the logical next validator through C1
 
 ---
 
@@ -378,6 +394,7 @@ Each signal validates via C1 harness (backtest → 2-week shadow → live). **Re
 | #51 | C1 harness fix + A1 backtest validation | ✅ | 2026-05-11 | Critical: `sector_prices` bug fixed; backtest report + reproducible script |
 | #52 | A2 post-earnings drift signal | ✅ | 2026-05-11 | Second real signal through C1; PEAD anomaly; Finnhub injection via `_inject_earnings_events()` |
 | #53 | B2 analyst revision momentum signal | ✅ | 2026-05-11 | Third real signal through C1; Hawkins et al. basis; Finnhub `/stock/recommendation` via `_inject_recommendations()` |
+| #54 | A3 insider buying (Form 4) signal | 🔵 Draft | — | Fourth real signal through C1; Cohen-Malloy-Pomorski basis; SEC EDGAR via `_inject_insider_events()` |
 
 ---
 
@@ -400,4 +417,4 @@ Each signal validates via C1 harness (backtest → 2-week shadow → live). **Re
 
 **Maintained by**: Claude  
 **Next review**: Daily (or after each PR merge)  
-**Last sync**: 2026-05-11 (PR #53 B2 Analyst Revisions merged; next batch → A3 Insider Form 4)
+**Last sync**: 2026-05-11 (PR #54 A3 Insider Buying opened draft; next batch → B5 Short Interest + Momentum)
