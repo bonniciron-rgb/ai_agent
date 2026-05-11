@@ -107,6 +107,22 @@
 
 ---
 
+## 🚀 Active PRs
+
+### A1: Sector Relative Strength Signal [PR #50]
+**PR #50 (branch: claude/ai-trading-agent-design-UwA6e)**
+
+| Feature | Files | Status | Notes |
+|---------|-------|--------|-------|
+| Signal implementation | `src/ai_agent/signals/sector_rs.py` | ✅ | `SectorRelativeStrengthSignal` — long when stock 20d return exceeds sector ETF by ≥2% |
+| `__init__.py` export | `src/ai_agent/signals/__init__.py` | ✅ | `SectorRelativeStrengthSignal` added to public API |
+| CLI registration | `scripts/backtest_signal.py` | ✅ | `sector_relative_strength` choice + `--sector-map` JSON flag |
+| Test suite | `tests/signals/test_sector_rs.py` | ✅ | 16 tests (outperform→long, underperform→flat, threshold edge, SPY fallback, insufficient history) |
+
+**First real signal flowing through C1 harness.**
+
+---
+
 ## 🚀 Upcoming Roadmap
 
 ### Phase A: Alpha Signals (Proof-of-Concept Layer)
@@ -114,12 +130,14 @@ Each signal validates via C1 harness (backtest → shadow → live).
 
 | Signal | Data Source | Est. Effort | Status | Notes |
 |--------|-------------|------------|--------|-------|
-| **A1: Sector Relative Strength** | Yahoo Finance (free) | 1.5d | Backlog | 1d lookback, pure feature engineering, no ML required |
+| **A1: Sector Relative Strength** | Yahoo Finance (free) | 1.5d | PR #50 | 20d lookback, pure feature engineering, no ML required |
 | **A2: Post-Earnings Drift (PEAD)** | Finnhub (already provisioned) | 2d | Backlog | 2d lookback, earnings surprise × trend, low-latency edge |
 | **A3: Insider Buying (Form 4)** | SEC EDGAR (free) | 2d | Backlog | Officer/director buys, 1-week forward look, monthly batches |
 | **B1: Options Flow** | Polygon / Tradier (paid, user opt-in) | 3d | Backlog | IV percentile, volume asymmetry, user explicitly enables feed |
 
 **Timeline**: A1 → A2 → A3 → B1 (sequential validation, each signal gets 2-week shadow window).
+
+**Next Batch**: A2 PEAD (Post-Earnings Drift) — Finnhub already provisioned, 2d effort.
 
 ---
 
@@ -164,18 +182,12 @@ Each signal validates via C1 harness (backtest → shadow → live).
 
 ### Status
 - **Last PR shipped**: PR #49 (Mobile approval UI, PWA P3) — merged & live
-- **Active PRs**: (none currently; ready for next batch)
+- **Active PRs**: PR #50 (A1 sector relative-strength signal)
 - **Blocked by**: Official sigil SVG from designer (placeholder currently ships)
-
-### Today's Task
-- [ ] Verify PR CI status
-- [ ] Review daily sync (this file)
-- [ ] Decide next shipment batch (A1 sector RS, or other priority?)
-- [ ] Update "Status" section below with new PRs
 
 ### Metrics (as of 2026-05-11)
 - **LLM usage (7d)**: $X.XX (last check: dashboard live, waiting for first cron cycle)
-- **Signal backtests**: 2 reference (AlwaysFlatSignal, SmaCrossSignal) ✅; A1–B1 pending
+- **Signal backtests**: 2 reference (AlwaysFlatSignal, SmaCrossSignal) ✅; A1 in PR #50; A2–B1 pending
 - **PWA installs**: Tracking via web push subscriptions (baseline: not yet measured)
 - **Approval surface**: Telegram + PWA both ready
 
@@ -183,10 +195,10 @@ Each signal validates via C1 harness (backtest → shadow → live).
 - None currently; awaiting designer sigil SVG (non-blocking, placeholder ships)
 
 ### Next Batch
-**Recommended**: Launch A1 (sector relative strength) signal validation.
-- Effort: 1.5 days
-- Risk: Low (free data, existing backtest framework)
-- Impact: Proof that C1 signal harness works end-to-end (backtest → shadow → live)
+**Recommended**: A2 PEAD (Post-Earnings Drift).
+- Effort: 2 days
+- Risk: Low (Finnhub already provisioned)
+- Impact: Second real alpha signal through C1 harness; earnings-surprise edge
 
 ---
 
@@ -230,7 +242,7 @@ Each signal validates via C1 harness (backtest → shadow → live).
 | Item | Status | Notes |
 |------|--------|-------|
 | Official sigil SVG | Pending from designer | Placeholder `branding/sigil.svg` ships; replace file once received, rebuild icons |
-| A1 signal implementation | Backlog | Sector relative strength, 1.5d sprint |
+| A1 signal implementation | PR #50 | Sector relative strength — `SectorRelativeStrengthSignal` |
 | iOS Phase 2 decision | Blocked on metrics | Measure PWA adoption (2 weeks from P3 ship), DAU >50% of installs = greenlight |
 | Broker integration (Alpaca / IB) | Q3+ 2026 | Out of scope for May release |
 
@@ -276,7 +288,7 @@ Each signal validates via C1 harness (backtest → shadow → live).
 | #47 | PWA P1 scaffold + icons | ✅ | 2026-05-10 | Icons generated, placeholder sigil |
 | #48 | PWA P2 web push | ✅ | 2026-05-10 | Parallel Telegram delivery |
 | #49 | PWA P3 mobile approval UI | ✅ | 2026-05-11 | CI passed, all tests ✅ |
-| TBD | A1 Sector relative strength signal | 🔄 Backlog | — | Next sprint candidate |
+| #50 | A1 Sector relative strength signal | 🔄 Open | — | First real signal through C1 harness |
 
 ---
 
@@ -295,4 +307,4 @@ Each signal validates via C1 harness (backtest → shadow → live).
 
 **Maintained by**: Claude  
 **Next review**: Daily (or after each PR merge)  
-**Last sync**: 2026-05-11 00:30 UTC
+**Last sync**: 2026-05-11
