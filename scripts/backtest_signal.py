@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from ai_agent.db.engine import init_schema
 from ai_agent.signals import (
     AlwaysFlatSignal,
+    AnalystRevisionMomentumSignal,
     PostEarningsDriftSignal,
     SectorRelativeStrengthSignal,
     SmaCrossSignal,
@@ -32,6 +33,7 @@ from ai_agent.signals import (
 
 REGISTRY = {
     "always_flat": AlwaysFlatSignal,
+    "analyst_revision_momentum": AnalystRevisionMomentumSignal,
     "post_earnings_drift": PostEarningsDriftSignal,
     "sector_relative_strength": SectorRelativeStrengthSignal,
     "sma_cross": SmaCrossSignal,

@@ -137,6 +137,89 @@ def _inject_sector_prices(signal: Signal, days_back: int, ref_date: date) -> Non
     signal.sector_prices = injected
 
 
+def _inject_recommendations(signal: Signal, symbols: list[str], ref_date: date) -> None:
+    """Fetch analyst recommendation trends from Finnhub and inject into an AnalystRevisionMomentumSignal.
+
+    No-op for any other signal type.  Mutates *signal.recommendations* in place so
+    the runner does not need to know which symbols are required before construction.
+
+    The look-back used when filtering snapshots is controlled by the signal's own
+    ``lookback_months`` attribute; we fetch all available history and let the signal
+    apply the window filter itself.
+    """
+    # Import here to avoid a circular import; analyst_revisions imports signals.base, not runner.
+    from ai_agent.signals.analyst_revisions import (
+        AnalystRevisionMomentumSignal,
+        RecommendationSnapshot,
+    )
+
+    if not isinstance(signal, AnalystRevisionMomentumSignal):
+        return
+    if signal.recommendations:
+        # Caller pre-populated recommendations (e.g. in tests) — trust them, nothing to do.
+        return
+
+    import os
+
+    from ai_agent.data.base import DataSourceError
+    from ai_agent.data.finnhub_source import FinnhubSource
+
+    api_key = os.environ.get("FINNHUB_API_KEY", "")
+    settings_key: str = ""
+    try:
+        from ai_agent.settings import get_settings
+
+        settings_key = get_settings().finnhub_api_key.get_secret_value()
+    except Exception:
+        pass
+
+    resolved_key = api_key or settings_key
+    if not resolved_key:
+        logger.warning(
+            "FINNHUB_API_KEY not set — AnalystRevisionMomentumSignal recommendations will be empty"
+        )
+        return
+
+    source = FinnhubSource(resolved_key)
+
+    injected: dict[str, list[RecommendationSnapshot]] = {}
+    for sym in symbols:
+        try:
+            raw_rows = source.recommendation_trends(sym)
+        except DataSourceError as exc:
+            logger.warning("Finnhub recommendation_trends fetch failed for %s: %s", sym, exc)
+            continue
+
+        snapshots: list[RecommendationSnapshot] = []
+        for row in raw_rows:
+            try:
+                period = date.fromisoformat(row["period"])
+                snapshots.append(
+                    RecommendationSnapshot(
+                        period=period,
+                        strong_buy=int(row.get("strongBuy") or 0),
+                        buy=int(row.get("buy") or 0),
+                        hold=int(row.get("hold") or 0),
+                        sell=int(row.get("sell") or 0),
+                        strong_sell=int(row.get("strongSell") or 0),
+                    )
+                )
+            except (KeyError, ValueError) as exc:
+                logger.debug("Skipping malformed recommendation row for %s: %s", sym, exc)
+                continue
+
+        # Sort chronologically; signal expects oldest-first.
+        snapshots.sort(key=lambda s: s.period)
+        injected[sym] = snapshots
+        logger.info(
+            "Injected %d recommendation snapshots for %s",
+            len(snapshots),
+            sym,
+        )
+
+    signal.recommendations = injected
+
+
 @dataclass
 class SignalBacktestSummary:
     signal_name: str
@@ -198,6 +281,8 @@ def backtest_signal(
     _inject_sector_prices(signal, days_back=days_back, ref_date=end)
     # Wire earnings events into the signal if it needs them and they weren't pre-loaded.
     _inject_earnings_events(signal, symbols=symbols, ref_date=end)
+    # Wire analyst recommendation trends into the signal if it needs them and they weren't pre-loaded.
+    _inject_recommendations(signal, symbols=symbols, ref_date=end)
 
     per_symbol: dict[str, dict] = {}
     portfolio_equity = pd.Series(dtype="float64")
