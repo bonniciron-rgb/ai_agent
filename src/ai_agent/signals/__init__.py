@@ -19,6 +19,7 @@ from ai_agent.signals.runner import (
     save_backtest_result,
 )
 from ai_agent.signals.sector_rs import SectorRelativeStrengthSignal
+from ai_agent.signals.short_interest import ShortInterestMomentumSignal
 from ai_agent.signals.strategy_adapter import SignalStrategy
 
 __all__ = [
@@ -30,6 +31,7 @@ __all__ = [
     "PostEarningsDriftSignal",
     "RecommendationSnapshot",
     "SectorRelativeStrengthSignal",
+    "ShortInterestMomentumSignal",
     "Signal",
     "SignalBacktestSummary",
     "SignalContext",
