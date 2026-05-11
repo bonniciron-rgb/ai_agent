@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from ai_agent.db.engine import init_schema
 from ai_agent.signals import (
     AlwaysFlatSignal,
+    SectorRelativeStrengthSignal,
     SmaCrossSignal,
     backtest_signal,
     save_backtest_result,
@@ -30,6 +31,7 @@ from ai_agent.signals import (
 
 REGISTRY = {
     "always_flat": AlwaysFlatSignal,
+    "sector_relative_strength": SectorRelativeStrengthSignal,
     "sma_cross": SmaCrossSignal,
 }
 
@@ -45,6 +47,12 @@ def main() -> int:
     parser.add_argument("--entry-threshold", default=0.3, type=float)
     parser.add_argument("--holding-days", default=5, type=int)
     parser.add_argument("--save", action="store_true", help="Persist a SignalBacktest row")
+    parser.add_argument(
+        "--sector-map",
+        default=None,
+        help="Path to JSON file mapping symbol→sector ETF (for sector_relative_strength signal). "
+        'Example: \'{"AAPL": "XLK", "JPM": "XLF"}\'',
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
@@ -52,7 +60,12 @@ def main() -> int:
     if args.save:
         init_schema()
 
-    signal = REGISTRY[args.signal]()
+    kwargs: dict = {}
+    if args.signal == "sector_relative_strength" and args.sector_map:
+        with open(args.sector_map) as fh:
+            kwargs["sector_map"] = json.load(fh)
+
+    signal = REGISTRY[args.signal](**kwargs)
     result = backtest_signal(
         signal,
         symbols=[s.strip().upper() for s in args.symbols.split(",")],
