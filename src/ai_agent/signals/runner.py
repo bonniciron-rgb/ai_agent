@@ -137,6 +137,112 @@ def _inject_sector_prices(signal: Signal, days_back: int, ref_date: date) -> Non
     signal.sector_prices = injected
 
 
+# Hardcoded Phase-1 symbol→CIK mapping for the ~50 largest US equities.
+# The full dynamic lookup (https://www.sec.gov/files/company_tickers.json) is
+# a follow-up; this covers the primary backtest universe without HTTP overhead.
+SYMBOL_TO_CIK: dict[str, str] = {
+    "AAPL": "320193",
+    "MSFT": "789019",
+    "GOOGL": "1652044",
+    "GOOG": "1652044",
+    "AMZN": "1018724",
+    "TSLA": "1318605",
+    "JPM": "19617",
+    "BAC": "70858",
+    "JNJ": "200406",
+    "XOM": "34088",
+    "CVX": "93410",
+    "KO": "21344",
+    "PG": "80424",
+    "PFE": "78003",
+    "UNH": "731766",
+    "GS": "886982",
+    "PEP": "77476",
+    "HD": "354950",
+    "MRK": "310158",
+    "ABBV": "1551152",
+    "LLY": "59478",
+    "AVGO": "1730168",
+    "META": "1326801",
+    "NVDA": "1045810",
+    "V": "1403161",
+    "MA": "1141391",
+    "WMT": "104169",
+    "DIS": "1001039",
+    "NFLX": "1065280",
+    "PYPL": "1633917",
+}
+
+
+def _inject_insider_events(signal: Signal, symbols: list[str], ref_date: date) -> None:
+    """Fetch Form 4 insider transactions from SEC EDGAR and inject into an InsiderBuyingSignal.
+
+    No-op for any other signal type.  Mutates *signal.insider_events* in place so
+    the runner does not need to know which symbols are required before construction.
+
+    For each symbol, looks up the CIK from ``SYMBOL_TO_CIK``.  Symbols without
+    a mapping log a warning and are skipped.  Dynamic CIK lookup via the SEC
+    company-tickers endpoint is a planned follow-up (Phase 2).
+    """
+    # Import here to avoid a circular import; insider_buying imports signals.base, not runner.
+    from ai_agent.signals.insider_buying import InsiderBuy, InsiderBuyingSignal
+
+    if not isinstance(signal, InsiderBuyingSignal):
+        return
+    if signal.insider_events:
+        # Caller pre-populated insider_events (e.g. in tests) — trust them, nothing to do.
+        return
+
+    from ai_agent.data.base import DataSourceError
+    from ai_agent.data.sec_edgar_source import SecEdgarSource
+
+    sec = SecEdgarSource()
+
+    injected: dict[str, list[InsiderBuy]] = {}
+    for sym in symbols:
+        cik = SYMBOL_TO_CIK.get(sym.upper())
+        if not cik:
+            logger.warning(
+                "No CIK mapping for %s — skipping insider event injection "
+                "(add to SYMBOL_TO_CIK in runner.py)",
+                sym,
+            )
+            continue
+
+        try:
+            filings = sec.recent_form4_filings(cik, days_back=signal.lookback_days)
+        except DataSourceError as exc:
+            logger.warning("SEC EDGAR Form 4 fetch failed for %s (CIK %s): %s", sym, cik, exc)
+            continue
+
+        events: list[InsiderBuy] = []
+        for filing in filings:
+            try:
+                filing_events = sec.parse_form4_filing(filing["accession_number"], cik)
+                events.extend(filing_events)
+            except DataSourceError as exc:
+                logger.warning(
+                    "Failed to parse Form 4 filing %s for %s: %s",
+                    filing["accession_number"],
+                    sym,
+                    exc,
+                )
+                continue
+
+        # Sort chronologically; signal expects oldest-first.
+        events.sort(key=lambda e: e.transaction_date)
+        injected[sym] = events
+        logger.info(
+            "Injected %d Form 4 transaction(s) for %s (CIK %s, lookback %d days)",
+            len(events),
+            sym,
+            cik,
+            signal.lookback_days,
+        )
+
+    signal.insider_events = injected
+
+
 def _inject_recommendations(signal: Signal, symbols: list[str], ref_date: date) -> None:
     """Fetch analyst recommendation trends from Finnhub and inject into an AnalystRevisionMomentumSignal.
 
@@ -283,6 +389,8 @@ def backtest_signal(
     _inject_earnings_events(signal, symbols=symbols, ref_date=end)
     # Wire analyst recommendation trends into the signal if it needs them and they weren't pre-loaded.
     _inject_recommendations(signal, symbols=symbols, ref_date=end)
+    # Wire SEC EDGAR Form 4 insider events into the signal if it needs them and they weren't pre-loaded.
+    _inject_insider_events(signal, symbols=symbols, ref_date=end)
 
     per_symbol: dict[str, dict] = {}
     portfolio_equity = pd.Series(dtype="float64")

@@ -10,6 +10,7 @@ from ai_agent.signals.analyst_revisions import (
     RecommendationSnapshot,
 )
 from ai_agent.signals.base import Signal, SignalContext, SignalResult
+from ai_agent.signals.insider_buying import InsiderBuy, InsiderBuyingSignal
 from ai_agent.signals.pead import EarningsEvent, PostEarningsDriftSignal
 from ai_agent.signals.reference import AlwaysFlatSignal, SmaCrossSignal
 from ai_agent.signals.runner import (
@@ -24,6 +25,8 @@ __all__ = [
     "AlwaysFlatSignal",
     "AnalystRevisionMomentumSignal",
     "EarningsEvent",
+    "InsiderBuy",
+    "InsiderBuyingSignal",
     "PostEarningsDriftSignal",
     "RecommendationSnapshot",
     "SectorRelativeStrengthSignal",
