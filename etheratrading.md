@@ -184,6 +184,17 @@ This is **honest, deliverable, and has real edge** — not from alpha discovery,
 
 ---
 
+### Batch 17: SPY Tilt Score Normalization [2026-05-12]
+**PR #60 (in progress)**
+
+| Change | Rationale | Status |
+|--------|-----------|--------|
+| **Add `score_floor`/`score_ceiling` to `SpyTiltStrategy`** | Composite per-symbol score = (A1+A2+B2)/3; A2/B2 abstain ~98% of bars, so universe-average peaks near ~0.30. Without rescaling the tilt is stuck at ~55% SPY — useless as an exposure manager. `score_ceiling=0.30` maps the realistic range to the full 50-100% band. | ✅ |
+| **Emit score distribution in backtest JSON** | `spy_tilt.score_distribution` (min/median/max) so we can tune `score_ceiling` empirically from real runs | ✅ |
+| **6 new tests** | normalization no-op default, ceiling compression, clamping above/below, floor offset | ✅ (576 total) |
+
+---
+
 ### Batch 16: v4 Tuning — A2 Fix + Universe Narrowing [2026-05-12]
 **PR #59 (in progress)**
 

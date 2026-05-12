@@ -76,6 +76,15 @@ class TestConstruction:
                 rebalance_threshold=-0.01,
             )
 
+    def test_score_floor_ge_ceiling_raises(self):
+        with pytest.raises(ValueError, match="score_floor"):
+            SpyTiltStrategy(
+                signal=_FixedSignal(1.0),
+                universe_bars={"A": _make_bars([100.0] * 60)},
+                score_floor=0.3,
+                score_ceiling=0.3,
+            )
+
     def test_valid_construction(self):
         strat = SpyTiltStrategy(
             signal=_FixedSignal(0.5),
@@ -83,6 +92,63 @@ class TestConstruction:
         )
         assert strat._min_alloc == 0.5
         assert strat._max_alloc == 1.0
+        assert strat._score_floor == 0.0
+        assert strat._score_ceiling == 1.0
+
+
+class TestScoreNormalization:
+    def test_default_no_op(self):
+        strat = SpyTiltStrategy(
+            signal=_FixedSignal(0.5),
+            universe_bars={},
+        )
+        # floor=0, ceiling=1: norm == score
+        assert strat._target_alloc(0.0) == pytest.approx(0.5)
+        assert strat._target_alloc(0.5) == pytest.approx(0.75)
+        assert strat._target_alloc(1.0) == pytest.approx(1.0)
+
+    def test_ceiling_compresses_range(self):
+        # score_ceiling=0.3 → score of 0.3 maps to max_alloc
+        strat = SpyTiltStrategy(
+            signal=_FixedSignal(0.0),
+            universe_bars={},
+            min_alloc=0.5,
+            max_alloc=1.0,
+            score_floor=0.0,
+            score_ceiling=0.3,
+        )
+        assert strat._target_alloc(0.0) == pytest.approx(0.5)
+        assert strat._target_alloc(0.15) == pytest.approx(0.75)  # midpoint
+        assert strat._target_alloc(0.3) == pytest.approx(1.0)
+
+    def test_score_above_ceiling_clamps(self):
+        strat = SpyTiltStrategy(
+            signal=_FixedSignal(0.0),
+            universe_bars={},
+            score_ceiling=0.3,
+        )
+        assert strat._target_alloc(0.9) == pytest.approx(1.0)
+
+    def test_score_below_floor_clamps(self):
+        strat = SpyTiltStrategy(
+            signal=_FixedSignal(0.0),
+            universe_bars={},
+            score_floor=0.1,
+            score_ceiling=0.4,
+        )
+        assert strat._target_alloc(0.0) == pytest.approx(0.5)  # below floor → min_alloc
+
+    def test_floor_offsets_baseline(self):
+        strat = SpyTiltStrategy(
+            signal=_FixedSignal(0.0),
+            universe_bars={},
+            min_alloc=0.5,
+            max_alloc=1.0,
+            score_floor=0.1,
+            score_ceiling=0.5,
+        )
+        # span = 0.4; score=0.3 → norm = (0.3-0.1)/0.4 = 0.5 → alloc 0.75
+        assert strat._target_alloc(0.3) == pytest.approx(0.75)
 
 
 class TestWarmup:
