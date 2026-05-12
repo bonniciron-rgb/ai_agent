@@ -1,6 +1,6 @@
 # Ethera Trading — Project Status & Roadmap
 
-**Last updated**: 2026-05-11 (Strategic pivot v3)
+**Last updated**: 2026-05-12 (v4 tuning — A2 fix + universe narrowing)
 **Maintained by**: Claude (Lead, Opus for design/architecture)
 **Team**: Sonnet (implementation/distribution), Tiger teams (background development)
 **Daily Sync**: This file is the single source of truth for standups and context preservation.
@@ -184,7 +184,62 @@ This is **honest, deliverable, and has real edge** — not from alpha discovery,
 
 ---
 
-### Batch 13: v2 Backtest Validation + Strategic Pivot Decision [2026-05-11]
+### Batch 16: v4 Tuning — A2 Fix + Universe Narrowing [2026-05-12]
+**PR #59 (in progress)**
+
+| Change | Rationale | Status |
+|--------|-----------|--------|
+| **Paginate Finnhub earnings fetch** in 90-day chunks | Root cause of A2's 9 trades: free tier caps `/calendar/earnings` at 3-month range. Single 1460-day call silently truncated. Now 16 chunks × 11 symbols = ~176 API calls. | ✅ |
+| **Narrow A1 universe to 11 symbols** | Removed JNJ (-0.47), PEP (-0.53), PFE (-0.60), PG (-0.40), UNH (-0.11), KO (marginal +0.24). Retained: AAPL MSFT GOOGL (XLK), JPM BAC GS (XLF), XOM CVX (XLE), AMZN HD TSLA (XLY). | ✅ |
+| **Update etheratrading.md** with v3 findings + v4 decisions | Documentation sync | ✅ |
+
+---
+
+### Batch 15: Phase B — SpyTiltStrategy (Exposure Manager) [Merged PR #58]
+**PR #58 (CI: ✅ merged 2026-05-12)**
+
+| Feature | Files | Status | Notes |
+|---------|-------|--------|-------|
+| `SpyTiltStrategy` | `src/ai_agent/backtest/spy_tilt.py` | ✅ | Pre-computes avg composite score across universe per date; maps score → SPY allocation fraction `[min_alloc, max_alloc]`; rebalances only when gap ≥ 5% |
+| `FractionalSignalStrategy` | `src/ai_agent/signals/strategy_adapter.py` | ✅ | Per-stock variant: deploys `score × cash` (0.33 → 33%, 0.67 → 67%, 1.0 → 100%) instead of all-in binary |
+| SPY tilt backtest run | `scripts/run_all_backtests.py` | ✅ | `SPY_tilt_50_100` run added (50-100% SPY allocation band) |
+| Tests | `tests/backtest/test_spy_tilt.py`, `tests/signals/test_strategy_adapter.py` | ✅ | 30 new tests; total 570 passing |
+
+---
+
+### Batch 14: Phase A — CompositeFactorSignal + Strategic Pivot [Merged PR #57]
+**PR #57 (CI: ✅ merged 2026-05-12)**
+
+| Feature | Files | Status | Notes |
+|---------|-------|--------|-------|
+| `CompositeFactorSignal` | `src/ai_agent/signals/composite.py` | ✅ | Weighted-average blender; continuous score [0,1]; custom weights + name suffix; 23 tests |
+| Kill A3/B5 | `signals/__init__.py`, `scripts/backtest_signal.py` | ✅ | Removed from public API + CLI registry; source files archived |
+| v3 backtest rewrite | `scripts/run_all_backtests.py` | ✅ | B2 reverted to 3-month streak; A1/A2 kept at v2 thresholds; composite run added |
+| Tests | `tests/signals/test_composite.py` | ✅ | 23 tests; full suite 540+ passing |
+
+---
+
+### Batch 13: v3 Backtest Results (Real Data, 2022-2026) [2026-05-12]
+**Workflow run on main after PR #57 merge**
+
+| Signal | Sharpe | CAGR | MaxDD | Alpha | Trades | Verdict |
+|--------|--------|------|-------|-------|--------|---------|
+| **SPY (benchmark)** | **0.99** | **16.6%** | **-19.0%** | — | — | — |
+| A1 Sector RS | 0.68 | 5.4% | -9.4% | -11.2% | 720 | Real signal; defensives drag it down |
+| A2 PEAD | 0.43 | 0.2% | -0.4% | -16.4% | **9** | **Data starvation (fixed in v4)** |
+| B2 Analyst Rev | 1.16 | 0.9% | -0.5% | -15.7% | **12** | Best per-trade quality; too sparse |
+| Composite equal | 0.71 | 5.7% | -9.4% | -10.9% | 732 | Dominated by A1 (A2/B2 near-zero) |
+| **SPY Tilt 50-100%** | *pending v4* | | | | | First run pending |
+
+**Key insights from v3**:
+1. A2 fired only 9 times in 4 years across 17 symbols — confirmed Finnhub API truncation bug (3-month limit)
+2. B2's 1.16 Sharpe on 12 trades is *directionally* valid — GOOGL, AAPL, TSLA all worked when it fired
+3. A1's composite includes JNJ/PEP/PFE/PG which reliably lose; removing them is the highest-ROI fix
+4. Composite ≈ A1/3 because A2/B2 inject zeros on ~98% of bars → not truly a multi-factor blend yet
+
+---
+
+### Batch 13 (old): v2 Backtest Validation + Strategic Pivot Decision [2026-05-11]
 **Two real-data backtest runs against SPY 2022-2026**
 
 | Run | Window | Universe | Key Finding |
@@ -257,33 +312,42 @@ This is **honest, deliverable, and has real edge** — not from alpha discovery,
 
 ---
 
-## 🚀 Upcoming Roadmap — v3 Exposure Manager
+## 🚀 Roadmap — v4 Tuning + Exposure Manager Product
 
-### Phase A: Composite Factor Blend [Week 1]
-Combine the surviving signals into a continuous-score factor model that drives SPY allocation rather than individual stock picks.
+### Phase A: Composite Factor Blend [✅ SHIPPED — PR #57]
+| Task | Priority | Status |
+|------|----------|--------|
+| Kill A3 + B5 — remove from registry | P0 | ✅ Done |
+| Revert B2 to `min_consecutive_months=3` | P0 | ✅ Done |
+| Build `CompositeFactorSignal` | P0 | ✅ Done |
+| Backtest composite vs SPY | P0 | ✅ Done (v3 results: 0.71 Sharpe, -10.9% alpha) |
 
+### Phase B: Exposure Manager Core [✅ SHIPPED — PR #58]
+| Task | Priority | Status |
+|------|----------|--------|
+| `FractionalSignalStrategy` — score-proportional position sizing | P0 | ✅ Done |
+| `SpyTiltStrategy` — SPY allocation 50-100% (backtest) / 50-150% (live w/ margin) | P0 | ✅ Done |
+| SPY tilt backtest run in v3 script | P0 | ✅ Done (first results pending v4 run) |
+
+### Phase B.2: Data Quality Fixes [In Progress — PR #59]
+| Task | Priority | Status |
+|------|----------|--------|
+| Fix A2 data starvation: paginate earnings fetch in 90-day chunks | P0 | ✅ Done |
+| Narrow A1 universe: remove defensive/pharma (6 symbols) | P0 | ✅ Done |
+| v4 backtest run: validate A2 with full 4yr earnings + narrow A1 | P0 | Pending workflow trigger |
+
+### Phase B.3: Exposure Manager Product UI [Next]
 | Task | Priority | Effort | Status |
 |------|----------|--------|--------|
-| **Kill A3 + B5** — remove from registry; archive code | P0 | 0.5d | Pending |
-| **Revert B2 to `min_consecutive_months=3`** (v1 config) | P0 | 0.25d | Pending |
-| **Build `CompositeFactorSignal`** — blend A1+A2+B2 with continuous (0.0-1.0) scoring | P0 | 1d | Pending |
-| **Continuous `SignalStrategy`** — convert binary buy/sell to fractional position sizing | P0 | 0.5d | Pending |
-| **Backtest composite vs SPY** — the real "do we have edge" test | P0 | 0.5d | Pending |
-
-### Phase B: Exposure Manager Product [Week 2]
-| Task | Priority | Effort | Status |
-|------|----------|--------|--------|
-| **Tilt-to-SPY allocation engine** (50-150% bounds, no leverage by default) | P0 | 1d | Pending |
-| **Kelly-style sizing** capped at 100% | P0 | 0.5d | Pending |
-| **Tilt dashboard** — show current allocation + composite signal breakdown | P1 | 1d | Pending |
-| **Daily Telegram tilt digest** — *"Today: 95% SPY. Composite signal +0.3. Last week: 102%."* | P1 | 0.5d | Pending |
-| **Drawdown protection** — auto-reduce exposure during high VIX regimes | P1 | 0.5d | Pending |
+| **Tilt dashboard** — show current allocation + composite signal breakdown | P0 | 1d | Pending |
+| **Daily Telegram tilt digest** — *"Today: 82% SPY. Composite +0.27. Change: -5%."* | P0 | 0.5d | Pending |
+| **Drawdown protection** — auto-reduce to 50% during VIX > 30 or bear regime | P1 | 0.5d | Pending |
+| **Kelly-style sizing** capped at 100% (backtest), 150% (live w/ margin) | P1 | 0.5d | Pending |
 
 ### Phase C: Discipline + Automation Features [Week 3+]
 - Tax-loss harvesting suggestions
 - Automatic rebalancing alerts
 - Cost-basis tracking integration
-- Position concentration limits
 - Behavioral coaching (delayed trades, cooldown periods)
 
 ### Killed/Deprioritized

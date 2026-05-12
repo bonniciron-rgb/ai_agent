@@ -1,20 +1,22 @@
-"""Unified backtest validation — v3 strategic pivot.
+"""Unified backtest validation — v4 universe + data quality tuning.
 
-Backtest v3 — strategic pivot after v1/v2 showed 0/5 signals beat SPY:
-  - DROPPED A3 (insider) — dynamic CIK lookup broken, mid-cap data sparse
-  - DROPPED B5 (short squeeze) — catastrophic falling-knife trap (-0.9 Sharpe)
-  - REVERTED B2 to min_consecutive_months=3 (v1 had Sharpe 1.51; relaxing degraded it)
-  - KEPT A1 retune from v2: holding 20d, threshold 3%
-  - KEPT A2 retune from v2: surprise_threshold=3%
-  - NEW: CompositeFactorSignal blending A1+A2+B2 with continuous scoring
-    -> the real test of whether multi-factor blend has edge vs SPY
+Backtest v4 — tuning after v3 results analysis (2026-05-12):
+  - NARROWED universe: removed defensive/pharma symbols with negative A1 Sharpe
+    (JNJ -0.47, PEP -0.53, PFE -0.60, PG -0.40, UNH -0.11, KO marginal)
+    Remaining 11 symbols: AAPL MSFT GOOGL (XLK), JPM BAC GS (XLF),
+    XOM CVX (XLE), AMZN HD TSLA (XLY)
+  - FIXED A2 PEAD data starvation: Finnhub free tier caps earnings calendar
+    at 3 months per request; was silently truncating the 4yr window to ~9
+    trades. Now paginates in 90-day chunks (16 chunks x 11 symbols = ~176
+    API calls — still well within rate limits).
+  - ADDED SPY tilt (50-100%) run using Phase B SpyTiltStrategy.
 
-Strategic reframe: not "alpha generator picking individual stocks" but
-"disciplined exposure manager modulating SPY allocation 50-150% based on
-factor signals". See etheratrading.md top-of-doc.
-
-Pulls real market data from yfinance (prices) + Finnhub (earnings + recs).
-SEC EDGAR + short interest fetches removed (A3/B5 deprecated).
+v3 findings summary:
+  A1: 0.68 Sharpe / 5.4% CAGR — real signal but dragged by defensives
+  A2: 0.43 Sharpe / 0.2% CAGR — only 9 trades (data starvation, now fixed)
+  B2: 1.16 Sharpe / 0.9% CAGR — best quality but only 12 trades (sparse)
+  Composite: 0.71 Sharpe / 5.7% CAGR — dominated by A1 (A2/B2 too sparse)
+  SPY Tilt: results pending (first run in v4)
 
 Writes ``backtest_results.json``.
 
@@ -61,7 +63,9 @@ logger = logging.getLogger("run_all_backtests")
 
 # ── Universe & period ─────────────────────────────────────────────────────────
 
-# A1 / A2 / B2: large-cap sector universe (unchanged from v1)
+# v4: removed defensive/pharma symbols that dragged A1 Sharpe negative
+# Dropped: JNJ (-0.47), PEP (-0.53), PFE (-0.60), PG (-0.40), UNH (-0.11), KO (0.24 marginal)
+# Retained: tech (XLK), financials (XLF), energy (XLE), momentum consumer-discretionary (XLY)
 SECTOR_MAP: dict[str, str] = {
     "AAPL": "XLK",
     "MSFT": "XLK",
@@ -71,12 +75,6 @@ SECTOR_MAP: dict[str, str] = {
     "GS": "XLF",
     "XOM": "XLE",
     "CVX": "XLE",
-    "JNJ": "XLV",
-    "PFE": "XLV",
-    "UNH": "XLV",
-    "KO": "XLP",
-    "PEP": "XLP",
-    "PG": "XLP",
     "AMZN": "XLY",
     "HD": "XLY",
     "TSLA": "XLY",
@@ -123,29 +121,57 @@ def fetch_prices(tickers: list[str], start: date, end: date) -> dict[str, pd.Dat
 def fetch_earnings(
     finnhub: FinnhubSource, symbols: list[str], ref_date: date, lookback_days: int
 ) -> dict[str, list[EarningsEvent]]:
-    start = ref_date - timedelta(days=lookback_days)
+    """Fetch earnings with 90-day chunk pagination.
+
+    Finnhub's free tier caps /calendar/earnings to a 3-month date range per
+    request. A single 1460-day call silently truncates. We split into 90-day
+    windows and deduplicate by event_date.
+    """
+    chunk_days = 90
+    total_start = ref_date - timedelta(days=lookback_days)
+
+    chunks: list[tuple[date, date]] = []
+    cur = total_start
+    while cur < ref_date:
+        chunk_end = min(cur + timedelta(days=chunk_days - 1), ref_date)
+        chunks.append((cur, chunk_end))
+        cur = chunk_end + timedelta(days=1)
+
+    logger.info("Finnhub earnings: %d symbols x %d chunks", len(symbols), len(chunks))
     out: dict[str, list[EarningsEvent]] = {}
     for sym in symbols:
-        try:
-            raw = finnhub.earnings_calendar(sym, start=start, end=ref_date)
-        except Exception as exc:
-            logger.warning("Finnhub earnings failed for %s: %s", sym, exc)
-            continue
+        seen: set[date] = set()
         events: list[EarningsEvent] = []
-        for ev in raw:
-            if ev.eps_actual is None or ev.eps_estimate is None or ev.eps_estimate == 0:
-                continue
-            surprise = (ev.eps_actual - ev.eps_estimate) / abs(ev.eps_estimate)
-            events.append(
-                EarningsEvent(
-                    announcement_date=ev.event_date,
-                    actual_eps=ev.eps_actual,
-                    consensus_eps=ev.eps_estimate,
-                    surprise_pct=surprise,
+        for chunk_start, chunk_end in chunks:
+            try:
+                raw = finnhub.earnings_calendar(sym, start=chunk_start, end=chunk_end)
+            except Exception as exc:
+                logger.warning(
+                    "Finnhub earnings failed for %s [%s-%s]: %s",
+                    sym,
+                    chunk_start,
+                    chunk_end,
+                    exc,
                 )
-            )
+                continue
+            for ev in raw:
+                if ev.eps_actual is None or ev.eps_estimate is None or ev.eps_estimate == 0:
+                    continue
+                if ev.event_date in seen:
+                    continue
+                seen.add(ev.event_date)
+                surprise = (ev.eps_actual - ev.eps_estimate) / abs(ev.eps_estimate)
+                events.append(
+                    EarningsEvent(
+                        announcement_date=ev.event_date,
+                        actual_eps=ev.eps_actual,
+                        consensus_eps=ev.eps_estimate,
+                        surprise_pct=surprise,
+                    )
+                )
+            time.sleep(0.05)
         out[sym] = events
-        time.sleep(0.05)
+        logger.info("  %s: %d earnings events", sym, len(events))
     return out
 
 
@@ -317,7 +343,7 @@ def run_spy_tilt_backtest(
 # ── Main orchestration ────────────────────────────────────────────────────────
 def main() -> int:
     logger.info("=" * 70)
-    logger.info("Ethera Trading — unified signal backtest v2")
+    logger.info("Ethera Trading — unified signal backtest v4")
     logger.info(
         "Universe: %d large-cap symbols, period %s → %s",
         len(LARGE_CAP_SYMBOLS),
@@ -448,7 +474,7 @@ def main() -> int:
     # 6. Output
     output = {
         "as_of": END.isoformat(),
-        "version": "v3",
+        "version": "v4",
         "strategy": "exposure_manager",
         "period": [START.isoformat(), END.isoformat()],
         "universe": LARGE_CAP_SYMBOLS,
