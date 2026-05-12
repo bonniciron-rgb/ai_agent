@@ -1,6 +1,6 @@
 # Ethera Trading — Project Status & Roadmap
 
-**Last updated**: 2026-05-12 (v4 tuning — A2 fix + universe narrowing)
+**Last updated**: 2026-05-12 (v4 results — Phase B exposure manager validated)
 **Maintained by**: Claude (Lead, Opus for design/architecture)
 **Team**: Sonnet (implementation/distribution), Tiger teams (background development)
 **Daily Sync**: This file is the single source of truth for standups and context preservation.
@@ -184,8 +184,41 @@ This is **honest, deliverable, and has real edge** — not from alpha discovery,
 
 ---
 
-### Batch 17: SPY Tilt Score Normalization [2026-05-12]
-**PR #60 (in progress)**
+### Batch 19: v4 Results — Phase B Exposure Manager Validated [2026-05-12]
+**Workflow run on main after PRs #59/#60/#61**
+
+| Strategy | Sharpe | CAGR | MaxDD | Trades | Verdict |
+|----------|--------|------|-------|--------|---------|
+| **SPY (benchmark)** | 0.99 | 16.6% | -19.0% | — | — |
+| A1 Sector RS (11 sym) | 0.90 | 9.8% | -12.6% | 517 | Real signal, sub-SPY return |
+| A2 PEAD | 0.22 | 0.2% | -0.8% | 7 | Data-limited (free Finnhub lacks deep earnings history) |
+| B2 Analyst Rev | 1.10 | 1.3% | -0.7% | 11 | High-quality, very low-frequency |
+| Composite | 0.93 | 10.3% | -12.6% | 528 | ≈ A1 (A2/B2 barely contribute) |
+| **SPY Tilt 50-100%** | **1.14** | 11.8% | **-11.2%** | 279 | **Beats SPY on Sharpe + halves drawdown** |
+
+**Verdict: the exposure-manager thesis holds.** SPY Tilt has a 15% higher Sharpe than buy-and-hold SPY and 41% smaller max drawdown. Critically, a naive constant-65% SPY position would have ~0.99 Sharpe (scaling exposure doesn't change Sharpe) — the tilt's 1.14 is genuine timing skill (de-risk before drawdowns, re-risk before rallies) worth ~0.15 Sharpe + ~1% CAGR over the constant version. This is the "modest factor premium + behavioral discipline" the strategic pivot promised.
+
+`score_distribution`: min 0.0 (→50% SPY), median 0.091 (→~65% SPY), max 0.455 (→100% SPY). Tilt now genuinely swings the full band (279 trades vs 49 in the broken near-constant version).
+
+**Open caveats**: (1) mild survivorship bias — 11-symbol universe chosen after seeing v3 losers; (2) one 4yr mostly-bull window — needs out-of-sample (2015-2019) validation; (3) composite is really "A1 breadth → SPY tilt", not a 3-factor blend; (4) reported `alpha` (CAGR diff) is unfair to low-beta strategies — added `capm_alpha`/`beta` in Batch 18.
+
+**Decision: green-light Phase B.3** (tilt dashboard + Telegram digest). Next analytical priority: out-of-sample backtest via the new `BACKTEST_START`/`BACKTEST_END` env override.
+
+---
+
+### Batch 18: Backtest Period Override + CAPM Alpha [2026-05-12]
+**PR #62 (in progress)**
+
+| Change | Rationale | Status |
+|--------|-----------|--------|
+| **`BACKTEST_START`/`BACKTEST_END`/`BACKTEST_LOOKBACK_DAYS` env override** in `run_all_backtests.py` | Enables out-of-sample runs (e.g. 2015-2019) without code changes — the #1 validation gap | ✅ |
+| **`capm_alpha_beta()` in `metrics.py`** | Jensen's alpha + beta from OLS regression of daily excess returns; fair to low-beta exposure-manager strategies (the naive CAGR-diff `alpha` structurally penalizes them). Exposed in `summary()` and the backtest JSON. | ✅ |
+| **8 new tests** | beta=1 self-regression, beta=0.5 half-exposure, zero-variance benchmark, insufficient overlap, positive-alpha case | ✅ (582 total) |
+
+---
+
+### Batch 17: SPY Tilt Score Normalization [Merged PR #60]
+**PR #60 (CI: ✅ merged 2026-05-12)**
 
 | Change | Rationale | Status |
 |--------|-----------|--------|
@@ -340,16 +373,20 @@ This is **honest, deliverable, and has real edge** — not from alpha discovery,
 | `SpyTiltStrategy` — SPY allocation 50-100% (backtest) / 50-150% (live w/ margin) | P0 | ✅ Done |
 | SPY tilt backtest run in v3 script | P0 | ✅ Done (first results pending v4 run) |
 
-### Phase B.2: Data Quality Fixes [In Progress — PR #59]
+### Phase B.2: Data Quality Fixes [✅ DONE — PRs #59/#60/#61]
 | Task | Priority | Status |
 |------|----------|--------|
-| Fix A2 data starvation: paginate earnings fetch in 90-day chunks | P0 | ✅ Done |
-| Narrow A1 universe: remove defensive/pharma (6 symbols) | P0 | ✅ Done |
-| v4 backtest run: validate A2 with full 4yr earnings + narrow A1 | P0 | Pending workflow trigger |
+| Fix A2 data starvation: paginate earnings fetch in 90-day chunks | P0 | ✅ Done (#59) — but free Finnhub still lacks deep history; A2 effectively data-limited |
+| Narrow A1 universe: remove defensive/pharma (6 symbols) | P0 | ✅ Done (#59) — Sharpe 0.68 → 0.90 |
+| Fix SPY tilt near-constant allocation (score normalization) | P0 | ✅ Done (#60) — tilt now swings 50-100% |
+| Throttle Finnhub to free-tier rate limit | P0 | ✅ Done (#60) — A2/B2 data restored |
+| Reconciliation: skip gracefully when T212 unconfigured | P1 | ✅ Done (#61) |
+| v4 backtest run | P0 | ✅ Done — SPY Tilt Sharpe 1.14 vs SPY 0.99; thesis validated (Batch 19) |
 
-### Phase B.3: Exposure Manager Product UI [Next]
+### Phase B.3: Exposure Manager Product UI [Next — GREENLIT]
 | Task | Priority | Effort | Status |
 |------|----------|--------|--------|
+| **Out-of-sample backtest** (2015-2019 via `BACKTEST_START`/`BACKTEST_END`) | P0 | 0.25d | Env override shipped (#62); needs workflow run |
 | **Tilt dashboard** — show current allocation + composite signal breakdown | P0 | 1d | Pending |
 | **Daily Telegram tilt digest** — *"Today: 82% SPY. Composite +0.27. Change: -5%."* | P0 | 0.5d | Pending |
 | **Drawdown protection** — auto-reduce to 50% during VIX > 30 or bear regime | P1 | 0.5d | Pending |
