@@ -294,3 +294,17 @@ def test_reconciliation_error_scenario(engine: Engine) -> None:
 
     details = json.loads(row.details or "[]")
     assert any(d.get("type") == "error" for d in details)
+
+
+def test_reconciliation_skipped_when_t212_key_unset(engine: Engine, monkeypatch) -> None:
+    """No T212_API_KEY → status 'skipped', persisted, no doomed API call."""
+    fake_settings = MagicMock()
+    fake_settings.t212_api_key.get_secret_value.return_value = ""
+    monkeypatch.setattr("ai_agent.reconciliation.get_settings", lambda: fake_settings)
+
+    row = run_reconciliation(engine=engine)
+
+    assert row.status == "skipped"
+    assert row.id is not None
+    details = json.loads(row.details or "[]")
+    assert any(d.get("type") == "skipped" for d in details)

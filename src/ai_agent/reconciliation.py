@@ -211,6 +211,21 @@ def run_reconciliation(
     The ``Reconciliation`` row that was written to the DB.
     """
     if t212_client is None:
+        if not get_settings().t212_api_key.get_secret_value():
+            logger.warning("T212_API_KEY not set — skipping reconciliation")
+            eng = engine or get_engine()
+            recon_row = Reconciliation(
+                run_at=datetime.now(UTC),
+                status="skipped",
+                position_drifts=0,
+                order_drifts=0,
+                details=json.dumps([{"type": "skipped", "message": "T212_API_KEY not set"}]),
+            )
+            with Session(eng) as session:
+                session.add(recon_row)
+                session.commit()
+                session.refresh(recon_row)
+            return recon_row
         t212_client = _build_t212_client()
 
     eng = engine or get_engine()
@@ -279,12 +294,15 @@ def run_reconciliation(
     )
 
     # --- Alert on drift or error ---
-    if status != "ok":
+    if status == "drift_detected":
         msg = (
             f"⚠️ Reconciliation drift: {position_drifts} position mismatches, "
             f"{order_drifts} order mismatches. Check /reconciliation in dashboard."
         )
         _send_telegram_alert(msg)
+    elif status == "error":
+        err = next((d.get("message", "") for d in details_list if d.get("type") == "error"), "")
+        _send_telegram_alert(f"⚠️ Reconciliation failed: {err}. Check /reconciliation in dashboard.")
 
     return recon_row
 
