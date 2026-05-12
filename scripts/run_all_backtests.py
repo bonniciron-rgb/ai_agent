@@ -90,6 +90,12 @@ INITIAL_CAPITAL = 10_000.0
 ENTRY_THRESHOLD = 0.3
 EXIT_THRESHOLD = 0.0
 
+# Finnhub free tier = 60 req/min. With 90-day earnings chunks (16 chunks x N
+# symbols) a 0.05s sleep blows through that and the key gets temp-banned, which
+# is why v4's first run came back with only 3/11 earnings symbols and 0 recs.
+# 1.1s keeps us at ~55 req/min, comfortably under the limit.
+FINNHUB_SLEEP_SECONDS = 1.1
+
 
 # ── Data fetchers ─────────────────────────────────────────────────────────────
 def fetch_prices(tickers: list[str], start: date, end: date) -> dict[str, pd.DataFrame]:
@@ -169,7 +175,7 @@ def fetch_earnings(
                         surprise_pct=surprise,
                     )
                 )
-            time.sleep(0.05)
+            time.sleep(FINNHUB_SLEEP_SECONDS)
         out[sym] = events
         logger.info("  %s: %d earnings events", sym, len(events))
     return out
@@ -202,7 +208,8 @@ def fetch_recommendations(
                 continue
         snaps.sort(key=lambda s: s.period)
         out[sym] = snaps
-        time.sleep(0.05)
+        logger.info("  %s: %d recommendation snapshots", sym, len(snaps))
+        time.sleep(FINNHUB_SLEEP_SECONDS)
     return out
 
 
