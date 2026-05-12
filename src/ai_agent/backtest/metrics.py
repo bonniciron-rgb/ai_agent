@@ -90,6 +90,39 @@ def volatility(equity: pd.Series) -> float:
     return float(equity.pct_change().dropna().std() * math.sqrt(252))
 
 
+def capm_alpha_beta(
+    equity: pd.Series,
+    benchmark: pd.Series,
+    *,
+    risk_free_rate: float = 0.0,
+) -> tuple[float, float]:
+    """Annualised Jensen's alpha and beta from an OLS regression of daily excess returns.
+
+    Fits ``r_strat - rf = alpha + beta * (r_bench - rf)`` on the inner-joined daily
+    returns, then annualises alpha by x252. Unlike a naive CAGR difference, this is
+    fair to strategies that deliberately run beta < 1 (e.g. an exposure manager):
+    their lower average return is explained by the lower beta, and any genuine
+    timing skill shows up as positive alpha.
+
+    Returns ``(0.0, 0.0)`` when there are fewer than 2 overlapping observations or
+    the benchmark has zero variance.
+    """
+    s = equity.pct_change().dropna()
+    b = benchmark.pct_change().dropna()
+    joined = pd.concat([s, b], axis=1, join="inner").dropna()
+    if len(joined) < 2:
+        return 0.0, 0.0
+    rf_daily = risk_free_rate / 252.0
+    rs = joined.iloc[:, 0] - rf_daily
+    rb = joined.iloc[:, 1] - rf_daily
+    var_b = float(rb.var())
+    if var_b == 0.0 or math.isnan(var_b):
+        return 0.0, 0.0
+    beta = float(rb.cov(rs) / var_b)
+    daily_alpha = float(rs.mean() - beta * rb.mean())
+    return daily_alpha * 252.0, beta
+
+
 def summary(equity: pd.Series, trades: list, *, benchmark: pd.Series | None = None) -> dict:
     """Return a dict of key metrics, optionally with benchmark comparison."""
     result: dict = {
@@ -108,8 +141,13 @@ def summary(equity: pd.Series, trades: list, *, benchmark: pd.Series | None = No
         result["benchmark_cagr"] = cagr(benchmark)
         result["benchmark_sharpe"] = sharpe_ratio(benchmark)
         result["benchmark_max_drawdown"] = max_drawdown(benchmark)
-        # Alpha = strategy CAGR - benchmark CAGR (simple)
+        # Naive alpha = strategy CAGR - benchmark CAGR (penalises low-beta strategies).
         result["alpha"] = result["cagr"] - result["benchmark_cagr"]
+        # Jensen's alpha (annualised) + beta from CAPM regression — fair to low-beta
+        # exposure-manager strategies.
+        jensen_alpha, beta = capm_alpha_beta(equity, benchmark)
+        result["capm_alpha"] = jensen_alpha
+        result["beta"] = beta
 
     return result
 

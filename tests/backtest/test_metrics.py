@@ -6,6 +6,7 @@ import pytest
 from ai_agent.backtest.engine import Trade
 from ai_agent.backtest.metrics import (
     cagr,
+    capm_alpha_beta,
     equity_from_benchmark,
     max_drawdown,
     sharpe_ratio,
@@ -177,3 +178,54 @@ def test_summary_with_benchmark_adds_alpha() -> None:
     result = summary(eq, [], benchmark=bench)
     assert "alpha" in result
     assert "benchmark_total_return" in result
+    assert "capm_alpha" in result
+    assert "beta" in result
+
+
+# --- capm_alpha_beta -------------------------------------------------------
+
+
+def test_capm_beta_one_when_strategy_equals_benchmark() -> None:
+    bench = _equity([100.0, 101.0, 99.0, 103.0, 102.0, 105.0])
+    alpha, beta = capm_alpha_beta(bench, bench)
+    assert beta == pytest.approx(1.0)
+    assert alpha == pytest.approx(0.0, abs=1e-9)
+
+
+def test_capm_beta_half_when_strategy_is_half_exposure() -> None:
+    # A strategy whose daily returns are exactly half the benchmark's → beta 0.5, alpha 0.
+    bench_vals = [100.0]
+    for r in [0.02, -0.01, 0.03, -0.02, 0.01]:
+        bench_vals.append(bench_vals[-1] * (1 + r))
+    strat_vals = [100.0]
+    for r in [0.02, -0.01, 0.03, -0.02, 0.01]:
+        strat_vals.append(strat_vals[-1] * (1 + r / 2))
+    bench = _equity(bench_vals)
+    strat = _equity(strat_vals)
+    alpha, beta = capm_alpha_beta(strat, bench)
+    assert beta == pytest.approx(0.5, abs=0.05)
+    assert alpha == pytest.approx(0.0, abs=0.05)
+
+
+def test_capm_zero_variance_benchmark_returns_zero() -> None:
+    flat_bench = _equity([100.0] * 10)
+    strat = _equity([100.0, 101.0, 102.0, 103.0, 104.0, 105.0, 106.0, 107.0, 108.0, 109.0])
+    alpha, beta = capm_alpha_beta(strat, flat_bench)
+    assert (alpha, beta) == (0.0, 0.0)
+
+
+def test_capm_insufficient_overlap_returns_zero() -> None:
+    alpha, beta = capm_alpha_beta(_equity([100.0]), _equity([100.0]))
+    assert (alpha, beta) == (0.0, 0.0)
+
+
+def test_capm_positive_alpha_when_strategy_outperforms_for_its_beta() -> None:
+    # Strategy = 0.5x benchmark daily returns PLUS a steady +0.001/day excess → positive alpha.
+    bench_vals = [100.0]
+    strat_vals = [100.0]
+    for r in [0.02, -0.01, 0.03, -0.02, 0.01, 0.015, -0.005]:
+        bench_vals.append(bench_vals[-1] * (1 + r))
+        strat_vals.append(strat_vals[-1] * (1 + r / 2 + 0.001))
+    alpha, beta = capm_alpha_beta(_equity(strat_vals), _equity(bench_vals))
+    assert beta == pytest.approx(0.5, abs=0.05)
+    assert alpha > 0.0

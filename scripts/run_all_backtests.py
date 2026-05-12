@@ -27,6 +27,10 @@ Requires:
 Usage::
 
     FINNHUB_API_KEY=… python scripts/run_all_backtests.py
+
+    # out-of-sample window
+    BACKTEST_START=2015-01-01 BACKTEST_END=2019-12-31 \
+        FINNHUB_API_KEY=… python scripts/run_all_backtests.py
 """
 
 from __future__ import annotations
@@ -83,8 +87,27 @@ LARGE_CAP_SYMBOLS = sorted(SECTOR_MAP.keys())
 ETFS = sorted(set(SECTOR_MAP.values()))
 BENCHMARK = "SPY"
 
-END = date.today()
-START = END - timedelta(days=1460)  # 4 years — includes 2022 bear market
+
+def _resolve_period() -> tuple[date, date]:
+    """Backtest window; overridable via BACKTEST_START / BACKTEST_END / BACKTEST_LOOKBACK_DAYS.
+
+    Defaults to the trailing 4 years (1460 days), which spans the 2022 bear market.
+    Set BACKTEST_START=2015-01-01 BACKTEST_END=2019-12-31 for an out-of-sample run.
+    """
+    end_env = os.environ.get("BACKTEST_END")
+    end = date.fromisoformat(end_env) if end_env else date.today()
+    start_env = os.environ.get("BACKTEST_START")
+    if start_env:
+        start = date.fromisoformat(start_env)
+    else:
+        lookback = int(os.environ.get("BACKTEST_LOOKBACK_DAYS", "1460"))
+        start = end - timedelta(days=lookback)
+    if start >= end:
+        raise ValueError(f"BACKTEST_START {start} must be before BACKTEST_END {end}")
+    return start, end
+
+
+START, END = _resolve_period()
 
 INITIAL_CAPITAL = 10_000.0
 ENTRY_THRESHOLD = 0.3
@@ -279,6 +302,8 @@ def run_signal_backtest(
             "max_drawdown": round(p.get("max_drawdown") or 0.0, 4),
             "win_rate": round(p.get("win_rate") or 0.0, 4),
             "alpha": round(p.get("alpha") or 0.0, 4),
+            "capm_alpha": round(p.get("capm_alpha") or 0.0, 4),
+            "beta": round(p.get("beta") or 0.0, 4),
             "trade_count": total_trades,
         },
         "per_symbol": per_symbol,
@@ -361,6 +386,8 @@ def run_spy_tilt_backtest(
             "max_drawdown": round(p.get("max_drawdown") or 0.0, 4),
             "win_rate": round(p.get("win_rate") or 0.0, 4),
             "alpha": round(p.get("alpha") or 0.0, 4),
+            "capm_alpha": round(p.get("capm_alpha") or 0.0, 4),
+            "beta": round(p.get("beta") or 0.0, 4),
             "trade_count": len(result.trades),
         },
     }

@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import pandas as pd
 
+from ai_agent.exposure.tilt import score_to_allocation
 from ai_agent.signals.base import Signal, SignalContext
 
 
@@ -114,10 +115,13 @@ class SpyTiltStrategy:
         self._bars_seen = 0
 
     def _target_alloc(self, score: float) -> float:
-        span = self._score_ceiling - self._score_floor
-        norm = (score - self._score_floor) / span
-        norm = max(0.0, min(1.0, norm))
-        return self._min_alloc + norm * (self._max_alloc - self._min_alloc)
+        return score_to_allocation(
+            score,
+            min_alloc=self._min_alloc,
+            max_alloc=self._max_alloc,
+            score_floor=self._score_floor,
+            score_ceiling=self._score_ceiling,
+        )
 
     def on_bar(
         self,
