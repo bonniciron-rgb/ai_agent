@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING
 from sqlmodel import Session, select
 
 from ai_agent.db.engine import get_engine, init_schema
-from ai_agent.db.models import LlmUsage, Proposal
+from ai_agent.db.models import ExposureSnapshot, LlmUsage, Proposal
 from ai_agent.db.settings_store import set_trading_halted
 
 if TYPE_CHECKING:
@@ -65,6 +65,10 @@ class DigestData:
     sample_rationale: str | None  # rationale of first proposal, truncated to 240 chars
     cost_threshold: Decimal
     cost_alert_triggered: bool
+    # Exposure-manager tilt (latest persisted ExposureSnapshot); None if none yet.
+    exposure_alloc_pct: int | None = None
+    exposure_composite: float | None = None
+    exposure_n_symbols: int | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -101,6 +105,11 @@ def aggregate_digest(
         usages = list(
             session.exec(select(LlmUsage).where(LlmUsage.occurred_on == digest_date)).all()
         )
+
+        # --- Exposure tilt (latest snapshot) ---
+        tilt_row = session.exec(
+            select(ExposureSnapshot).order_by(ExposureSnapshot.as_of.desc())  # type: ignore[attr-defined]
+        ).first()
 
     # Compute proposal aggregates
     proposals_by_status: dict[str, int] = {}
@@ -159,6 +168,9 @@ def aggregate_digest(
         sample_rationale=sample_rationale,
         cost_threshold=threshold,
         cost_alert_triggered=cost_alert_triggered,
+        exposure_alloc_pct=(tilt_row.allocation_pct if tilt_row is not None else None),
+        exposure_composite=(tilt_row.composite_score if tilt_row is not None else None),
+        exposure_n_symbols=(tilt_row.n_symbols if tilt_row is not None else None),
     )
 
 
@@ -197,6 +209,14 @@ def format_digest_html(digest: DigestData) -> str:
         if digest.cache_hit_rate is not None:
             rate_pct = digest.cache_hit_rate * 100
             lines.append(f"• Cache hit rate: {rate_pct:.1f}%")
+
+    # Exposure-manager tilt section
+    if digest.exposure_alloc_pct is not None:
+        lines.append("")
+        lines.append("<b>\U0001f4c8 Exposure tilt:</b>")
+        composite = digest.exposure_composite if digest.exposure_composite is not None else 0.0
+        n = digest.exposure_n_symbols if digest.exposure_n_symbols is not None else 0
+        lines.append(f"• {digest.exposure_alloc_pct}% SPY (composite {composite:+.2f}, {n} names)")
 
     # Sample rationale section
     if digest.sample_rationale is not None:
