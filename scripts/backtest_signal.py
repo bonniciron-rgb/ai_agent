@@ -24,22 +24,21 @@ from ai_agent.db.engine import init_schema
 from ai_agent.signals import (
     AlwaysFlatSignal,
     AnalystRevisionMomentumSignal,
-    InsiderBuyingSignal,
     PostEarningsDriftSignal,
     SectorRelativeStrengthSignal,
-    ShortInterestMomentumSignal,
     SmaCrossSignal,
     backtest_signal,
     save_backtest_result,
 )
 
+# v3 strategic pivot: insider_buying (A3) and short_interest_momentum (B5)
+# removed from registry after backtests showed they don't produce alpha.
+# Source files retained for archive — re-add here if data quality improves.
 REGISTRY = {
     "always_flat": AlwaysFlatSignal,
     "analyst_revision_momentum": AnalystRevisionMomentumSignal,
-    "insider_buying": InsiderBuyingSignal,
     "post_earnings_drift": PostEarningsDriftSignal,
     "sector_relative_strength": SectorRelativeStrengthSignal,
-    "short_interest_momentum": ShortInterestMomentumSignal,
     "sma_cross": SmaCrossSignal,
 }
 

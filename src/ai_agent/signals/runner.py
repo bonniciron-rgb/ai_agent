@@ -200,11 +200,15 @@ def _inject_insider_events(signal: Signal, symbols: list[str], ref_date: date) -
 
     injected: dict[str, list[InsiderBuy]] = {}
     for sym in symbols:
+        # Try hardcoded map first (fast path for common tickers)
         cik = SYMBOL_TO_CIK.get(sym.upper())
+        # Fall back to dynamic lookup via SEC company_tickers.json
+        if not cik:
+            cik = SecEdgarSource.symbol_to_cik(sym)
         if not cik:
             logger.warning(
                 "No CIK mapping for %s — skipping insider event injection "
-                "(add to SYMBOL_TO_CIK in runner.py)",
+                "(symbol not found in hardcoded map or company_tickers.json)",
                 sym,
             )
             continue

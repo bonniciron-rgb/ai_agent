@@ -1,9 +1,43 @@
 # Ethera Trading — Project Status & Roadmap
 
-**Last updated**: 2026-05-11  
-**Maintained by**: Claude (Lead, Opus for design/architecture)  
-**Team**: Sonnet (implementation/distribution), Tiger teams (background development)  
+**Last updated**: 2026-05-11 (Strategic pivot v3)
+**Maintained by**: Claude (Lead, Opus for design/architecture)
+**Team**: Sonnet (implementation/distribution), Tiger teams (background development)
 **Daily Sync**: This file is the single source of truth for standups and context preservation.
+
+---
+
+## 🎯 Strategic Pivot — 2026-05-11
+
+After 10 days of building 5 selective signals (A1, A2, B2, A3, B5) and running 2 real-data backtests against SPY across 4 years (2022–2026), **none of the signals showed positive alpha vs the benchmark**. This is consistent with academic literature: most published anomalies have decayed 60-80% post-publication, and single-factor long-only strategies typically lose to passive in bull markets.
+
+### Decision: Reframe from "Alpha Generator" to "Disciplined Exposure Manager"
+
+**Old framing**: AI picks individual stocks to outperform SPY.
+**New framing**: AI holds SPY by default, **tilts allocation 50-150%** based on composite factor model, removes emotional/timing friction.
+
+**Why this works**:
+- Behavioral finance research: retail investors lose 2-4% CAGR through bad timing decisions; automating that captures real value
+- Multi-factor blends consistently beat single-factor in academic literature (modest alpha, ~1-2% per year)
+- The LLM + agent infrastructure's real strength is decision support + automation, not alpha discovery
+- We're not competing with Renaissance/AQR (hundreds of factors, billions of capital) — we're solving a real retail problem
+
+### v1 + v2 Backtest Findings (Source of Truth)
+
+| Signal | v1 Sharpe | v2 Sharpe | v2 Alpha | Verdict |
+|---|---:|---:|---:|---|
+| SPY (4yr benchmark) | 1.14 | 1.02 | — | — |
+| A1 Sector RS | 0.83 | 0.67 | -12.0% | Underperforms; mean-reverts on defensives |
+| A2 PEAD | 0.18 | 0.43 | -17.1% | Working as designed; data sparse |
+| B2 Analyst Rev (3mo) | **1.51** | 0.75 | -16.4% | v1 config was right; v2 relaxation degraded |
+| A3 Insider | -0.05 | 0.00 | -17.3% | Broken; dynamic CIK lookup needs debug |
+| B5 Short Squeeze | 0.00 | **-0.90** | **-29.6%** | Catastrophic falling-knife trap |
+
+### New Product Vision
+
+> *"I hold SPY by default. When my factor model says risk-on, I tilt to 120%. When risk-off, 70%. The AI handles timing, sizing, rebalancing, and reporting so I don't have to think about it daily."*
+
+This is **honest, deliverable, and has real edge** — not from alpha discovery, but from discipline + behavioral finance.
 
 ---
 
@@ -150,7 +184,34 @@
 
 ---
 
-### Batch 11: B5 Short Interest + Momentum Signal [Merged PR #55]
+### Batch 13: v2 Backtest Validation + Strategic Pivot Decision [2026-05-11]
+**Two real-data backtest runs against SPY 2022-2026**
+
+| Run | Window | Universe | Key Finding |
+|-----|--------|----------|-------------|
+| **v1** | 2024-2026 (2yr bull) | 17 large-caps | SPY 1.14 Sharpe; 0/5 signals beat. A1 overtrading (1,112 trades). B2 highest at 1.51 Sharpe but sparse. A3 only UNH fired. B5 zero trades. |
+| **v2** | 2022-2026 (4yr) | 17 LC + 8 mid-cap (A3) + 6 high-short (B5) | SPY 1.02 Sharpe. A1 trades dropped to 722 (good). B2 degraded to 0.75 with relaxation (v1 was better). A3 zero data (dynamic CIK broken). B5 catastrophic (-0.90 Sharpe, -99% MaxDD on BYND). |
+
+**Verdict**: 0/5 signals have positive alpha. Selective signal approach won't beat SPY at retail scale.
+
+**Strategic decision (user-confirmed 2026-05-11)**: Pivot from alpha discovery to **disciplined exposure manager**. Combine surviving signals (A1, A2, B2) into composite factor blend driving SPY allocation tilt 50-150%. See top-of-doc strategic pivot section.
+
+---
+
+### Batch 12: Unified Real-Data Backtest Infrastructure [Merged PR #56]
+**PR #56 (CI: ✅ passed 2026-05-11)**
+
+| Feature | Files | Status | Notes |
+|---------|-------|--------|-------|
+| Unified backtest script | `scripts/run_all_backtests.py` | ✅ | Pulls 2y of yfinance OHLCV + short interest, Finnhub earnings + recs, SEC EDGAR Form 4; runs A1/A2/B2/A3/B5 against same 17-symbol universe + SPY benchmark; writes `backtest_results.json` |
+| GitHub Actions workflow | `.github/workflows/signal-backtests.yml` | ✅ | `workflow_dispatch` + monthly cron; uploads `backtest_results.json` artifact (90-day retention); prints summary table per run |
+| Shared data fetch | (inside script) | ✅ | One yfinance call covers prices + sector ETFs + benchmark; one Finnhub pass covers earnings + recs; one SEC pass covers all CIKs — eliminates redundant network for cross-signal validation |
+
+**Validates the 5 shipped signals end-to-end on real market data.** Needs `FINNHUB_API_KEY` secret. First run produces portfolio Sharpe/CAGR/alpha-vs-SPY + per-symbol breakdowns for every signal in a single JSON artifact.
+
+---
+
+
 **PR #55 (CI: ✅ passed 2026-05-11)**
 
 | Feature | Files | Status | Notes |
@@ -196,25 +257,40 @@
 
 ---
 
-## 🚀 Upcoming Roadmap
+## 🚀 Upcoming Roadmap — v3 Exposure Manager
 
-### Phase A & B: Alpha Signal Pipeline
-Each signal validates via C1 harness (backtest → 2-week shadow → live). **Revised queue adds B2/B5 as fast wins.**
+### Phase A: Composite Factor Blend [Week 1]
+Combine the surviving signals into a continuous-score factor model that drives SPY allocation rather than individual stock picks.
 
-| Signal | Source | Est. Effort | Status | Edge |
-|--------|--------|------------|--------|------|
-| **A1: Sector Relative Strength** | Yahoo Finance (free) | 1.5d | ✅ Shadow (#50) | 20d return spread vs sector ETF |
-| **A2: Post-Earnings Drift (PEAD)** | Finnhub (provisioned) | 2d | ✅ Merged (#52) | Earnings surprise × trend persistence (well-documented anomaly) |
-| **B2: Analyst Estimate Revisions** | Finnhub `/stock/recommendation` (free) | 1d | ✅ Merged (#53) | 3+ consecutive upward EPS revisions → sustained outperformance |
-| **A3: Insider Buying (Form 4)** | SEC EDGAR (free) | 2d | ✅ Merged (#54) | Officer/director buys precede outsized returns on avg |
-| **B5: Short Interest + Momentum** | yfinance `shortPercentOfFloat` (free) | 1d | ✅ Merged (#55) | High short float + rising 20d momentum = squeeze setup |
-| **B1: Options Flow** | Polygon / Tradier (paid, user opt-in) | 3d | Backlog | Unusual call/put volume detects institutional positioning |
+| Task | Priority | Effort | Status |
+|------|----------|--------|--------|
+| **Kill A3 + B5** — remove from registry; archive code | P0 | 0.5d | Pending |
+| **Revert B2 to `min_consecutive_months=3`** (v1 config) | P0 | 0.25d | Pending |
+| **Build `CompositeFactorSignal`** — blend A1+A2+B2 with continuous (0.0-1.0) scoring | P0 | 1d | Pending |
+| **Continuous `SignalStrategy`** — convert binary buy/sell to fractional position sizing | P0 | 0.5d | Pending |
+| **Backtest composite vs SPY** — the real "do we have edge" test | P0 | 0.5d | Pending |
 
-**Deprioritized**: Twitter/X (API now paid), StockTwits (low SNR), Dark pool (all quality sources paid $300+/mo).
+### Phase B: Exposure Manager Product [Week 2]
+| Task | Priority | Effort | Status |
+|------|----------|--------|--------|
+| **Tilt-to-SPY allocation engine** (50-150% bounds, no leverage by default) | P0 | 1d | Pending |
+| **Kelly-style sizing** capped at 100% | P0 | 0.5d | Pending |
+| **Tilt dashboard** — show current allocation + composite signal breakdown | P1 | 1d | Pending |
+| **Daily Telegram tilt digest** — *"Today: 95% SPY. Composite signal +0.3. Last week: 102%."* | P1 | 0.5d | Pending |
+| **Drawdown protection** — auto-reduce exposure during high VIX regimes | P1 | 0.5d | Pending |
 
-**Sprint order**: A2 → B2 → A3 → B5 → B1 (sequential validation, each signal gets 2-week shadow).
+### Phase C: Discipline + Automation Features [Week 3+]
+- Tax-loss harvesting suggestions
+- Automatic rebalancing alerts
+- Cost-basis tracking integration
+- Position concentration limits
+- Behavioral coaching (delayed trades, cooldown periods)
 
-**Next Batch**: A3 Insider Buying (Form 4) — SEC EDGAR free, 2d effort.
+### Killed/Deprioritized
+- **A3 (Insider Buying)**: Dynamic CIK lookup broken; even when fixed, mid-cap insider data sparse. Archive code, revisit if paid Form 4 feed (InsiderInsights, OpenInsider) becomes affordable.
+- **B5 (Short Squeeze)**: Catastrophic falling-knife trap (-0.9 Sharpe, -99% MaxDD on BYND). Signal logic fundamentally flawed without a proper trend filter. Archive.
+- **B1 (Options Flow)**: Paid feed required; deprioritized until exposure manager ships.
+- **T212 / MarketWatch / Twitter / StockTwits / Dark Pool**: All rejected (low SNR or paid).
 
 ---
 
@@ -258,25 +334,33 @@ Each signal validates via C1 harness (backtest → 2-week shadow → live). **Re
 ## 📋 Daily Sync Template
 
 ### Status
-- **Last PR shipped**: PR #54 (A3 Insider Buying) — merged & live
-- **Active PRs**: none
-- **Blocked by**: Official sigil SVG from designer (non-blocking, placeholder ships)
-- **In flight**: B1 Options Flow — awaiting greenlight (paid feed / user opt-in required)
+- **Last PR shipped**: PR #56 (unified real-data backtest infra) — merged & live
+- **Active PRs**: Strategic pivot v3 cleanup (in progress)
+- **Blocked by**: nothing — strategic direction confirmed by user 2026-05-11
+- **In flight**: Phase A composite factor blend (kill A3/B5, revert B2, build CompositeFactorSignal)
 
 ### Metrics (as of 2026-05-11)
 - **LLM usage (7d)**: $X.XX (last check: dashboard live, waiting for first cron cycle)
-- **Signal backtests**: 2 reference ✅; A1 ✅ + shadow; A2 ✅ + shadow; B2 ✅ + shadow; A3 ✅ + shadow; B5 ✅ + shadow; B1 pending
+- **Signal backtests**: v1 + v2 real-data runs complete; 0/5 signals beat SPY
+- **Strategic conclusion**: Pivot to composite factor blend + exposure manager (see top of doc)
 - **PWA installs**: Tracking via web push subscriptions (baseline: not yet measured)
 - **Approval surface**: Telegram + PWA both ready
 
 ### Blockers
-- None currently; awaiting designer sigil SVG (non-blocking, placeholder ships)
+- None currently; strategic direction confirmed
 
-### Next Batch
-**Recommended**: B1 Options Flow — Polygon/Tradier paid feed, user opt-in required.
-- B1 effort: 3 days; requires a paid options data subscription (Polygon or Tradier); unusual call/put volume detects institutional positioning before price moves
-- B5 is now in PR #55 (draft); after merge, B1 is the next logical validator through C1
-- **User action required for B1**: confirm which options data provider to use and whether paid subscription is approved
+### Next Batch — v3 Strategic Pivot
+**Phase A (this week)**: Composite factor blend
+1. Kill A3 + B5 from registry (archive code in place)
+2. Revert B2 to `min_consecutive_months=3` (v1 config had Sharpe 1.51)
+3. Build `CompositeFactorSignal` — continuous 0.0-1.0 score blending A1+A2+B2
+4. Convert `SignalStrategy` to fractional position sizing
+5. Backtest composite vs SPY — the real test of whether the blend has edge
+
+**Phase B (next week)**: Tilt-to-SPY exposure manager
+- 50-150% allocation bounds (no leverage by default)
+- Kelly sizing capped at 100%
+- Daily Telegram tilt digest
 
 ---
 

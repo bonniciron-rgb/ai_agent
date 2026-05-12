@@ -1,16 +1,26 @@
-"""Unified backtest validation for all 5 shipped signals (A1, A2, B2, A3, B5).
+"""Unified backtest validation — v3 strategic pivot.
 
-Pulls real market data directly from yfinance (prices, short interest),
-Finnhub (earnings calendar, analyst recommendations), and SEC EDGAR (Form 4
-insider transactions) — bypassing the DB-backed runner so this script can
-run in any environment with outbound network access (e.g. GitHub Actions).
+Backtest v3 — strategic pivot after v1/v2 showed 0/5 signals beat SPY:
+  - DROPPED A3 (insider) — dynamic CIK lookup broken, mid-cap data sparse
+  - DROPPED B5 (short squeeze) — catastrophic falling-knife trap (-0.9 Sharpe)
+  - REVERTED B2 to min_consecutive_months=3 (v1 had Sharpe 1.51; relaxing degraded it)
+  - KEPT A1 retune from v2: holding 20d, threshold 3%
+  - KEPT A2 retune from v2: surprise_threshold=3%
+  - NEW: CompositeFactorSignal blending A1+A2+B2 with continuous scoring
+    -> the real test of whether multi-factor blend has edge vs SPY
 
-Writes a consolidated JSON report to ``backtest_results.json`` (and stdout)
-covering portfolio-level metrics + per-symbol breakdowns for every signal.
+Strategic reframe: not "alpha generator picking individual stocks" but
+"disciplined exposure manager modulating SPY allocation 50-150% based on
+factor signals". See etheratrading.md top-of-doc.
+
+Pulls real market data from yfinance (prices) + Finnhub (earnings + recs).
+SEC EDGAR + short interest fetches removed (A3/B5 deprecated).
+
+Writes ``backtest_results.json``.
 
 Requires:
-  - FINNHUB_API_KEY env var (for A2 / B2)
-  - Internet access to yfinance + SEC EDGAR (for A3 / B5)
+  - FINNHUB_API_KEY env var (for A2 / B2 / composite)
+  - Internet access to yfinance
 
 Usage::
 
@@ -36,22 +46,21 @@ from ai_agent.backtest.engine import run_backtest
 from ai_agent.backtest.metrics import equity_from_benchmark
 from ai_agent.backtest.metrics import summary as metrics_summary
 from ai_agent.data.finnhub_source import FinnhubSource
-from ai_agent.data.sec_edgar_source import SecEdgarSource
 from ai_agent.signals.analyst_revisions import (
     AnalystRevisionMomentumSignal,
     RecommendationSnapshot,
 )
-from ai_agent.signals.insider_buying import InsiderBuyingSignal
+from ai_agent.signals.composite import CompositeFactorSignal
 from ai_agent.signals.pead import EarningsEvent, PostEarningsDriftSignal
-from ai_agent.signals.runner import SYMBOL_TO_CIK
 from ai_agent.signals.sector_rs import SectorRelativeStrengthSignal
-from ai_agent.signals.short_interest import ShortInterestMomentumSignal
 from ai_agent.signals.strategy_adapter import SignalStrategy
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
 logger = logging.getLogger("run_all_backtests")
 
 # ── Universe & period ─────────────────────────────────────────────────────────
+
+# A1 / A2 / B2: large-cap sector universe (unchanged from v1)
 SECTOR_MAP: dict[str, str] = {
     "AAPL": "XLK",
     "MSFT": "XLK",
@@ -71,17 +80,16 @@ SECTOR_MAP: dict[str, str] = {
     "HD": "XLY",
     "TSLA": "XLY",
 }
+LARGE_CAP_SYMBOLS = sorted(SECTOR_MAP.keys())
 ETFS = sorted(set(SECTOR_MAP.values()))
 BENCHMARK = "SPY"
-ALL_SYMBOLS = sorted(SECTOR_MAP.keys())
 
 END = date.today()
-START = END - timedelta(days=730)  # 2 years
+START = END - timedelta(days=1460)  # 4 years — includes 2022 bear market
 
 INITIAL_CAPITAL = 10_000.0
 ENTRY_THRESHOLD = 0.3
 EXIT_THRESHOLD = 0.0
-HOLDING_DAYS = 5
 
 
 # ── Data fetchers ─────────────────────────────────────────────────────────────
@@ -111,18 +119,6 @@ def fetch_prices(tickers: list[str], start: date, end: date) -> dict[str, pd.Dat
     return result
 
 
-def fetch_short_interest(symbols: list[str]) -> dict[str, float]:
-    out: dict[str, float] = {}
-    for sym in symbols:
-        try:
-            info = yf.Ticker(sym).info
-            out[sym] = float(info.get("shortPercentOfFloat") or 0.0)
-        except Exception as exc:
-            logger.warning("short interest fetch failed for %s: %s — defaulting to 0.0", sym, exc)
-            out[sym] = 0.0
-    return out
-
-
 def fetch_earnings(
     finnhub: FinnhubSource, symbols: list[str], ref_date: date, lookback_days: int
 ) -> dict[str, list[EarningsEvent]]:
@@ -148,7 +144,7 @@ def fetch_earnings(
                 )
             )
         out[sym] = events
-        time.sleep(0.05)  # gentle pacing for 60 req/min free tier
+        time.sleep(0.05)
     return out
 
 
@@ -183,51 +179,22 @@ def fetch_recommendations(
     return out
 
 
-def fetch_insider_events(symbols: list[str], lookback_days: int = 90) -> dict[str, list]:
-    sec_ua = os.environ.get(
-        "SEC_EDGAR_USER_AGENT",
-        "Ethera Trading research@etheratrading.example",
-    )
-    sec = SecEdgarSource(user_agent=sec_ua)
-    out: dict[str, list] = {}
-    for sym in symbols:
-        cik = SYMBOL_TO_CIK.get(sym.upper())
-        if not cik:
-            logger.warning("No CIK mapping for %s — skipping insider data", sym)
-            continue
-        try:
-            filings = sec.recent_form4_filings(cik, days_back=lookback_days)
-        except Exception as exc:
-            logger.warning("SEC filings list failed for %s: %s", sym, exc)
-            continue
-        events = []
-        for f in filings:
-            try:
-                events.extend(sec.parse_form4_filing(f["accession_number"], cik))
-            except Exception as exc:
-                logger.warning("SEC parse failed for %s %s: %s", sym, f["accession_number"], exc)
-                continue
-            time.sleep(0.15)
-        events.sort(key=lambda e: e.transaction_date)
-        out[sym] = events
-        logger.info("SEC: %d Form 4 events for %s (CIK %s)", len(events), sym, cik)
-    return out
-
-
 # ── Per-signal backtest runner ────────────────────────────────────────────────
 def run_signal_backtest(
     signal,
+    symbols: list[str],
     price_data: dict[str, pd.DataFrame],
     bench_close: pd.Series,
     *,
     label: str,
+    holding_days: int = 5,
 ) -> dict:
-    """Run a single signal against every symbol; return aggregated portfolio metrics."""
+    """Run *signal* against *symbols*; return portfolio metrics dict."""
     per_symbol: dict[str, dict] = {}
     portfolio_equity = pd.Series(dtype="float64")
     total_trades = 0
 
-    for sym in ALL_SYMBOLS:
+    for sym in symbols:
         if sym not in price_data or price_data[sym].empty:
             continue
         df = price_data[sym].copy()
@@ -241,7 +208,7 @@ def run_signal_backtest(
             symbol=sym,
             entry_threshold=ENTRY_THRESHOLD,
             exit_threshold=EXIT_THRESHOLD,
-            holding_days=HOLDING_DAYS,
+            holding_days=holding_days,
         )
         result = run_backtest(df, strategy, symbol=sym, initial_capital=INITIAL_CAPITAL)
         sym_sum = metrics_summary(result.equity_curve, result.trades)
@@ -287,15 +254,20 @@ def run_signal_backtest(
 # ── Main orchestration ────────────────────────────────────────────────────────
 def main() -> int:
     logger.info("=" * 70)
-    logger.info("Ethera Trading — unified signal backtest")
-    logger.info("Universe: %d symbols, period %s → %s", len(ALL_SYMBOLS), START, END)
+    logger.info("Ethera Trading — unified signal backtest v2")
+    logger.info(
+        "Universe: %d large-cap symbols, period %s → %s",
+        len(LARGE_CAP_SYMBOLS),
+        START,
+        END,
+    )
     logger.info("=" * 70)
 
-    # 1. Prices for every stock + sector ETF + benchmark
-    all_tickers = ALL_SYMBOLS + ETFS + [BENCHMARK]
+    # 1. Prices for all stocks + sector ETFs + benchmark
+    all_tickers = sorted(set(LARGE_CAP_SYMBOLS) | set(ETFS) | {BENCHMARK})
     price_data = fetch_prices(all_tickers, START, END)
 
-    # 2. Benchmark series (date-indexed)
+    # 2. Benchmark
     bench_df = price_data.get(BENCHMARK)
     if bench_df is None or bench_df.empty:
         logger.error("No SPY benchmark data — aborting")
@@ -314,61 +286,88 @@ def main() -> int:
             s.index = pd.to_datetime(s.index).date
             sector_prices[etf] = s
 
-    # 4. Finnhub data (A2 + B2)
+    # 4. Finnhub (A2 + B2)
     finnhub_key = os.environ.get("FINNHUB_API_KEY", "")
     earnings_by_sym: dict[str, list[EarningsEvent]] = {}
     recs_by_sym: dict[str, list[RecommendationSnapshot]] = {}
     if finnhub_key:
         fh = FinnhubSource(finnhub_key)
         logger.info("Finnhub: fetching earnings + recommendation trends ...")
-        earnings_by_sym = fetch_earnings(fh, ALL_SYMBOLS, ref_date=END, lookback_days=730)
-        recs_by_sym = fetch_recommendations(fh, ALL_SYMBOLS)
+        earnings_by_sym = fetch_earnings(fh, LARGE_CAP_SYMBOLS, ref_date=END, lookback_days=1460)
+        recs_by_sym = fetch_recommendations(fh, LARGE_CAP_SYMBOLS)
     else:
         logger.warning("FINNHUB_API_KEY not set — A2 / B2 backtests will have no data")
 
-    # 5. SEC EDGAR Form 4 data (A3)
-    logger.info("SEC EDGAR: fetching Form 4 filings ...")
-    insider_by_sym = fetch_insider_events(ALL_SYMBOLS, lookback_days=730)
-
-    # 6. yfinance short interest snapshots (B5)
-    logger.info("yfinance: fetching short interest snapshots ...")
-    short_data = fetch_short_interest(ALL_SYMBOLS)
-
-    # 7. Run each signal
+    # 5. Run individual signals + composite
     reports: list[dict] = []
 
     logger.info("-" * 70)
-    logger.info("A1: Sector Relative Strength")
+    logger.info("A1: Sector Relative Strength (20d hold, 3%% threshold)")
     a1 = SectorRelativeStrengthSignal(
-        sector_map=SECTOR_MAP, sector_prices=sector_prices, lookback=20, threshold=0.02
+        sector_map=SECTOR_MAP,
+        sector_prices=sector_prices,
+        lookback=20,
+        threshold=0.03,
     )
-    reports.append(run_signal_backtest(a1, price_data, bench_close, label="A1_sector_rs"))
+    reports.append(
+        run_signal_backtest(
+            a1, LARGE_CAP_SYMBOLS, price_data, bench_close, label="A1_sector_rs", holding_days=20
+        )
+    )
 
     logger.info("-" * 70)
-    logger.info("A2: Post-Earnings Drift")
-    a2 = PostEarningsDriftSignal(earnings_events=earnings_by_sym)
-    reports.append(run_signal_backtest(a2, price_data, bench_close, label="A2_pead"))
+    logger.info("A2: Post-Earnings Drift (3%% surprise threshold)")
+    a2 = PostEarningsDriftSignal(
+        earnings_events=earnings_by_sym,
+        surprise_threshold=0.03,
+    )
+    reports.append(
+        run_signal_backtest(
+            a2, LARGE_CAP_SYMBOLS, price_data, bench_close, label="A2_pead", holding_days=20
+        )
+    )
 
     logger.info("-" * 70)
-    logger.info("B2: Analyst Revision Momentum")
-    b2 = AnalystRevisionMomentumSignal(recommendations=recs_by_sym)
-    reports.append(run_signal_backtest(b2, price_data, bench_close, label="B2_analyst_rev"))
+    logger.info("B2: Analyst Revision Momentum (3 consecutive months -- reverted from v2)")
+    b2 = AnalystRevisionMomentumSignal(
+        recommendations=recs_by_sym,
+        # min_consecutive_months defaults to 3 -- v1 config with Sharpe 1.51
+    )
+    reports.append(
+        run_signal_backtest(
+            b2,
+            LARGE_CAP_SYMBOLS,
+            price_data,
+            bench_close,
+            label="B2_analyst_rev",
+            holding_days=20,
+        )
+    )
 
     logger.info("-" * 70)
-    logger.info("A3: Insider Buying (Form 4)")
-    a3 = InsiderBuyingSignal(insider_events=insider_by_sym)
-    reports.append(run_signal_backtest(a3, price_data, bench_close, label="A3_insider"))
+    logger.info("CompositeFactorSignal: equal-weight blend of A1 + A2 + B2")
+    composite = CompositeFactorSignal(
+        sub_signals=[a1, a2, b2],
+        name_suffix="equal_weight",
+    )
+    reports.append(
+        run_signal_backtest(
+            composite,
+            LARGE_CAP_SYMBOLS,
+            price_data,
+            bench_close,
+            label="Composite_equal",
+            holding_days=20,
+        )
+    )
 
-    logger.info("-" * 70)
-    logger.info("B5: Short Interest + Momentum")
-    b5 = ShortInterestMomentumSignal(short_data=short_data)
-    reports.append(run_signal_backtest(b5, price_data, bench_close, label="B5_short_squeeze"))
-
-    # 8. Final aggregated output
+    # 6. Output
     output = {
         "as_of": END.isoformat(),
+        "version": "v3",
+        "strategy": "exposure_manager",
         "period": [START.isoformat(), END.isoformat()],
-        "universe": ALL_SYMBOLS,
+        "universe": LARGE_CAP_SYMBOLS,
         "benchmark": {
             "symbol": BENCHMARK,
             "sharpe": round(bench_metrics.get("sharpe") or 0.0, 4),
@@ -379,8 +378,6 @@ def main() -> int:
             "price_symbols": len(price_data),
             "earnings_symbols": sum(1 for v in earnings_by_sym.values() if v),
             "recommendation_symbols": sum(1 for v in recs_by_sym.values() if v),
-            "insider_symbols": sum(1 for v in insider_by_sym.values() if v),
-            "short_interest_symbols": sum(1 for v in short_data.values() if v > 0),
         },
         "signals": reports,
     }
@@ -390,13 +387,12 @@ def main() -> int:
     print(json.dumps(output, indent=2, default=str))
     logger.info("Wrote %s", out_path)
 
-    # Quick console summary table
     print("\n" + "=" * 70)
-    print(f"{'Signal':<22} {'Sharpe':>8} {'CAGR':>8} {'MaxDD':>8} {'Win%':>8} {'Trades':>8}")
+    print(f"{'Signal':<22} {'Sharpe':>8} {'CAGR':>8} {'MaxDD':>8} {'Alpha':>8} {'Trades':>8}")
     print("-" * 70)
     bm = output["benchmark"]
     print(
-        f"{'SPY (benchmark)':<22} {bm['sharpe']:>8.2f} {bm['cagr'] * 100:>7.1f}% "
+        f"{'SPY (4yr benchmark)':<22} {bm['sharpe']:>8.2f} {bm['cagr'] * 100:>7.1f}% "
         f"{bm['max_drawdown'] * 100:>7.1f}% {'—':>8} {'—':>8}"
     )
     for r in reports:
@@ -406,7 +402,7 @@ def main() -> int:
             continue
         print(
             f"{r['signal']:<22} {m['sharpe']:>8.2f} {m['cagr'] * 100:>7.1f}% "
-            f"{m['max_drawdown'] * 100:>7.1f}% {m['win_rate'] * 100:>7.1f}% {m['trade_count']:>8}"
+            f"{m['max_drawdown'] * 100:>7.1f}% {m['alpha'] * 100:>7.1f}% {m['trade_count']:>8}"
         )
     print("=" * 70)
     return 0
