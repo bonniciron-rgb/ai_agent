@@ -45,6 +45,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from ai_agent.backtest.engine import run_backtest
 from ai_agent.backtest.metrics import equity_from_benchmark
 from ai_agent.backtest.metrics import summary as metrics_summary
+from ai_agent.backtest.spy_tilt import SpyTiltStrategy
 from ai_agent.data.finnhub_source import FinnhubSource
 from ai_agent.signals.analyst_revisions import (
     AnalystRevisionMomentumSignal,
@@ -251,6 +252,68 @@ def run_signal_backtest(
     }
 
 
+def run_spy_tilt_backtest(
+    signal,
+    universe_price_data: dict[str, pd.DataFrame],
+    spy_df: pd.DataFrame,
+    bench_close: pd.Series,
+    *,
+    label: str,
+    min_alloc: float = 0.5,
+    max_alloc: float = 1.0,
+) -> dict:
+    """Run SPY-tilt exposure-manager backtest using *signal* over *universe_price_data*.
+
+    Maps the average composite score across the universe to a SPY allocation
+    fraction in [min_alloc, max_alloc] and rebalances SPY accordingly.
+    """
+    filtered: dict[str, pd.DataFrame] = {}
+    for sym, df in universe_price_data.items():
+        d = df.copy()
+        d.index = pd.to_datetime(d.index)
+        d = d[(d.index.date >= START) & (d.index.date <= END)]
+        if len(d) >= 100:
+            filtered[sym] = d
+
+    if not filtered:
+        logger.warning("[%s] no universe symbols with sufficient data — skipping", label)
+        return {"signal": label, "metrics": None}
+
+    spy_filtered = spy_df.copy()
+    spy_filtered.index = pd.to_datetime(spy_filtered.index)
+    spy_filtered = spy_filtered[
+        (spy_filtered.index.date >= START) & (spy_filtered.index.date <= END)
+    ]
+
+    strategy = SpyTiltStrategy(
+        signal=signal,
+        universe_bars=filtered,
+        min_alloc=min_alloc,
+        max_alloc=max_alloc,
+        rebalance_threshold=0.05,
+        warmup_bars=50,
+    )
+    logger.info("[%s] pre-computing universe scores ...", label)
+    result = run_backtest(spy_filtered, strategy, symbol="SPY", initial_capital=INITIAL_CAPITAL)
+    p = metrics_summary(result.equity_curve, result.trades, benchmark=bench_close)
+    return {
+        "signal": label,
+        "signal_name": signal.name,
+        "signal_version": signal.version,
+        "period": [START.isoformat(), END.isoformat()],
+        "universe_symbols": list(filtered.keys()),
+        "spy_tilt": {"min_alloc": min_alloc, "max_alloc": max_alloc},
+        "metrics": {
+            "sharpe": round(p.get("sharpe") or 0.0, 4),
+            "cagr": round(p.get("cagr") or 0.0, 4),
+            "max_drawdown": round(p.get("max_drawdown") or 0.0, 4),
+            "win_rate": round(p.get("win_rate") or 0.0, 4),
+            "alpha": round(p.get("alpha") or 0.0, 4),
+            "trade_count": len(result.trades),
+        },
+    }
+
+
 # ── Main orchestration ────────────────────────────────────────────────────────
 def main() -> int:
     logger.info("=" * 70)
@@ -360,6 +423,27 @@ def main() -> int:
             holding_days=20,
         )
     )
+
+    logger.info("-" * 70)
+    logger.info("SPY Tilt (50-100%%): composite score modulates SPY allocation")
+    universe_bars = {
+        sym: price_data[sym]
+        for sym in LARGE_CAP_SYMBOLS
+        if sym in price_data and not price_data[sym].empty
+    }
+    bench_df = price_data.get(BENCHMARK)
+    if bench_df is not None and not bench_df.empty:
+        reports.append(
+            run_spy_tilt_backtest(
+                composite,
+                universe_bars,
+                bench_df,
+                bench_close,
+                label="SPY_tilt_50_100",
+                min_alloc=0.5,
+                max_alloc=1.0,
+            )
+        )
 
     # 6. Output
     output = {
