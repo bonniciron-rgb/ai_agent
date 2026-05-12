@@ -1,6 +1,6 @@
 # Ethera Trading — Project Status & Roadmap
 
-**Last updated**: 2026-05-12 (v4 results — Phase B exposure manager validated)
+**Last updated**: 2026-05-12 (out-of-sample 2015-2019 — SPY tilt does NOT generalize)
 **Maintained by**: Claude (Lead, Opus for design/architecture)
 **Team**: Sonnet (implementation/distribution), Tiger teams (background development)
 **Daily Sync**: This file is the single source of truth for standups and context preservation.
@@ -33,11 +33,15 @@ After 10 days of building 5 selective signals (A1, A2, B2, A3, B5) and running 2
 | A3 Insider | -0.05 | 0.00 | -17.3% | Broken; dynamic CIK lookup needs debug |
 | B5 Short Squeeze | 0.00 | **-0.90** | **-29.6%** | Catastrophic falling-knife trap |
 
-### New Product Vision
+### New Product Vision (under revision — see ⚠️ below)
 
 > *"I hold SPY by default. When my factor model says risk-on, I tilt to 120%. When risk-off, 70%. The AI handles timing, sizing, rebalancing, and reporting so I don't have to think about it daily."*
 
-This is **honest, deliverable, and has real edge** — not from alpha discovery, but from discipline + behavioral finance.
+### ⚠️ Status update — 2026-05-12 (Batch 21)
+
+The breadth-based SPY-tilt implementation of this vision **passed in-sample (2022-2026: Sharpe 1.14 vs SPY 0.99) but failed out-of-sample (2015-2019: Sharpe 0.51 vs SPY 0.73, CAPM α −1.75%)** — the timing edge did not generalize. What *did* survive both windows: **A1 sector relative strength as a low-beta defensive equity sleeve** (~+1.7% CAPM alpha, β ≈ 0.5, ~⅔ SPY drawdown). A2/B2 are non-viable on free Finnhub data.
+
+So the *deliverable, honest* product is currently "**a low-beta equity sleeve**" rather than "a smart SPY-timing overlay". A regime-gated tilt (using the macro regime detector instead of stock breadth) is the next thing to test before concluding timing has no edge here. The exposure-manager infrastructure (tilt engine, ExposureSnapshot) is built and reusable. **Directional decision pending.**
 
 ---
 
@@ -184,8 +188,33 @@ This is **honest, deliverable, and has real edge** — not from alpha discovery,
 
 ---
 
-### Batch 20: Phase B.3 — Exposure Tilt Engine + Daily Digest Wiring [2026-05-12]
-**PR #63 (in progress)**
+### Batch 21: Out-of-Sample Test (2015-2019) — SPY Tilt Does NOT Generalize [2026-05-12]
+**Workflow run with `BACKTEST_START=2015-01-01 BACKTEST_END=2019-12-31`**
+
+| Strategy | Sharpe | CAGR | MaxDD | CAPM α | β | Trades |
+|----------|--------|------|-------|--------|---|--------|
+| **SPY (benchmark)** | **0.73** | 9.4% | -20.2% | — | 1.0 | — |
+| A1 Sector RS (10 sym) | 0.74 | 6.4% | -13.4% | **+1.7%** | 0.49 | 498 |
+| A2 PEAD | — | — | — | — | — | 0 (no pre-2020 Finnhub earnings) |
+| B2 Analyst Rev | — | — | — | — | — | 0 (Finnhub rec history too shallow) |
+| Composite | 0.74 | 6.4% | -13.4% | +1.7% | 0.49 | 498 (= A1) |
+| **SPY Tilt 50-100%** | **0.51** | 4.0% | -14.2% | **−1.75%** | 0.60 | 319 |
+
+**Verdict: the v4 "SPY Tilt beats SPY" result was period-specific.** In 2022-2026 the tilt had Sharpe 1.14 vs SPY 0.99 (+0.15) and positive timing alpha. In 2015-2019 it has Sharpe 0.51 vs SPY 0.73 (**−0.22**) and CAPM α **−1.75%** — worse than a constant ~61% SPY position (≈5.7% CAGR / 0.73 Sharpe). The breadth-based timing de-risked at the wrong moments. **Not a robust edge.**
+
+**What DID hold up: A1 itself.** +1.7% CAPM alpha, β ≈ 0.5, Sharpe matching SPY, ~⅔ the drawdown — consistent across both windows. A1 is a real (modest) *low-beta defensive equity sleeve*, not an alpha generator or a smart SPY-timing overlay.
+
+**A2/B2 are non-viable on free Finnhub** for any historical work — no pre-2020 earnings actuals, shallow rec history. The composite is effectively just A1.
+
+**Decision: PAUSE Phase B.3 product UI** — don't build a tilt dashboard around a timing overlay that subtracts value out-of-sample. The `ExposureSnapshot`/tilt-engine plumbing is retained (can drive whatever allocation logic we settle on). Reframe options under consideration:
+- **(a) Low-beta equity sleeve** — hold the A1-leading basket; ~half SPY's vol, +1-2% structural alpha, smaller drawdowns. Deliverable today, honest.
+- **(b) Regime-gated exposure** — replace the breadth-tilt input with the macro regime detector (VIX + SPY trend). De-risk on regime, not on stock breadth. Needs its own backtest. *(Lead's recommendation for next cycle.)*
+- **(c) Accept "constant ~65% equity"** — what a target-date fund does for free.
+
+---
+
+### Batch 20: Phase B.3 — Exposure Tilt Engine + Daily Digest Wiring [Merged PR #63]
+**PR #63 (CI: ✅ merged 2026-05-12) — infra retained even though the breadth-tilt itself is paused (Batch 21)**
 
 | Component | Files | Status | Notes |
 |-----------|-------|--------|-------|
@@ -397,16 +426,17 @@ This is **honest, deliverable, and has real edge** — not from alpha discovery,
 | Fix SPY tilt near-constant allocation (score normalization) | P0 | ✅ Done (#60) — tilt now swings 50-100% |
 | Throttle Finnhub to free-tier rate limit | P0 | ✅ Done (#60) — A2/B2 data restored |
 | Reconciliation: skip gracefully when T212 unconfigured | P1 | ✅ Done (#61) |
-| v4 backtest run | P0 | ✅ Done — SPY Tilt Sharpe 1.14 vs SPY 0.99; thesis validated (Batch 19) |
+| v4 in-sample backtest (2022-2026) | P0 | ✅ Done — SPY Tilt Sharpe 1.14 vs SPY 0.99 (later shown period-specific — see Batch 21) |
+| Out-of-sample backtest (2015-2019) | P0 | ✅ Done (#62 env override) — **SPY Tilt does NOT generalize** (Sharpe 0.51 vs SPY 0.73, CAPM α −1.75%). A1 alone holds up (+1.7% CAPM α). See Batch 21. |
 
-### Phase B.3: Exposure Manager Product UI [Next — GREENLIT]
-| Task | Priority | Effort | Status |
-|------|----------|--------|--------|
-| **Out-of-sample backtest** (2015-2019 via `BACKTEST_START`/`BACKTEST_END`) | P0 | 0.25d | Env override shipped (#62); needs workflow run |
-| **Tilt dashboard** — show current allocation + composite signal breakdown | P0 | 1d | Pending |
-| **Daily Telegram tilt digest** — *"Today: 82% SPY. Composite +0.27. Change: -5%."* | P0 | 0.5d | Pending |
-| **Drawdown protection** — auto-reduce to 50% during VIX > 30 or bear regime | P1 | 0.5d | Pending |
-| **Kelly-style sizing** capped at 100% (backtest), 150% (live w/ margin) | P1 | 0.5d | Pending |
+### Phase B.3: Exposure Manager Product UI [⏸ PAUSED — see Batch 21]
+The breadth-based SPY tilt failed out-of-sample, so the dashboard/digest product is on hold pending a directional decision (low-beta sleeve vs regime-gated tilt vs accept constant exposure). Tilt-engine + ExposureSnapshot plumbing is shipped (#62/#63) and reusable for whatever we pick.
+| Task | Priority | Status |
+|------|----------|--------|
+| Tilt-engine + ExposureSnapshot + digest wiring | P0 | ✅ Shipped (#62/#63) — kept regardless of direction |
+| `app/tilt/page.tsx` dashboard + API route | P1 | ⏸ Paused — don't build UI around a non-robust strategy |
+| Directional decision: (a) low-beta sleeve / (b) regime-gated tilt / (c) constant exposure | P0 | Pending user call |
+| Regime-gated exposure backtest (if (b)) | P1 | Pending |
 
 ### Phase C: Discipline + Automation Features [Week 3+]
 - Tax-loss harvesting suggestions
