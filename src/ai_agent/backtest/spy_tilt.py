@@ -3,12 +3,23 @@
 Rather than picking individual stocks, this strategy uses a composite signal
 score across a stock universe to modulate the fraction of capital held in SPY:
 
-    target_alloc = min_alloc + score * (max_alloc - min_alloc)
+    norm  = clamp((score - score_floor) / (score_ceiling - score_floor), 0, 1)
+    target = min_alloc + norm * (max_alloc - min_alloc)
 
-Example with min_alloc=0.5, max_alloc=1.0:
+Example with score_floor=0, score_ceiling=1, min_alloc=0.5, max_alloc=1.0:
     score=0.0  →  50% in SPY  (defensive)
     score=0.5  →  75% in SPY  (neutral)
     score=1.0  → 100% in SPY  (fully deployed)
+
+Why score normalization matters:
+    CompositeFactorSignal divides by the number of sub-signals. When most
+    sub-signals abstain (return 0.0 — e.g. PEAD with no recent earnings,
+    analyst-revision with no qualifying streak), the composite per-symbol
+    score is capped near 1/N even when the active signal is fully bullish.
+    Averaged across the universe, the realistic range collapses to roughly
+    [0.05, 0.30] — without rescaling the tilt would be near-constant at ~55%
+    SPY. Setting score_ceiling to the realistic upper bound (e.g. 0.30)
+    restores the full 50-100% dynamic range.
 
 In live trading with a margin-enabled account, max_alloc can be set to 1.5 to
 achieve the 50-150% SPY tilt described in etheratrading.md. In the backtest
@@ -44,10 +55,16 @@ class SpyTiltStrategy:
         Mapping of symbol → OHLCV DataFrame. Used to compute per-symbol
         signal scores which are then averaged to produce the portfolio score.
     min_alloc:
-        Minimum SPY allocation fraction when score=0.0 (default 0.5 = 50%).
+        Minimum SPY allocation fraction when normalized score=0.0 (default 0.5).
     max_alloc:
-        Maximum SPY allocation fraction when score=1.0 (default 1.0 = 100%).
+        Maximum SPY allocation fraction when normalized score=1.0 (default 1.0).
         For live trading with margin, set to 1.5; backtest engine caps at 1.0.
+    score_floor:
+        Universe-average score mapped to min_alloc (default 0.0).
+    score_ceiling:
+        Universe-average score mapped to max_alloc (default 1.0). Set lower
+        (e.g. 0.30) when the composite's realistic range is compressed by
+        abstaining sub-signals — see module docstring.
     rebalance_threshold:
         Only rebalance when |target_alloc - current_alloc| >= this value.
         Prevents commission drag from micro-adjustments (default 0.05 = 5%).
@@ -62,6 +79,8 @@ class SpyTiltStrategy:
         *,
         min_alloc: float = 0.5,
         max_alloc: float = 1.0,
+        score_floor: float = 0.0,
+        score_ceiling: float = 1.0,
         rebalance_threshold: float = 0.05,
         warmup_bars: int = 50,
     ) -> None:
@@ -69,6 +88,8 @@ class SpyTiltStrategy:
             raise ValueError(
                 f"min_alloc={min_alloc} must satisfy 0 <= min_alloc <= max_alloc={max_alloc}"
             )
+        if score_floor >= score_ceiling:
+            raise ValueError(f"score_floor={score_floor} must be < score_ceiling={score_ceiling}")
         if rebalance_threshold < 0.0:
             raise ValueError("rebalance_threshold must be non-negative")
 
@@ -76,6 +97,8 @@ class SpyTiltStrategy:
         self._universe_bars = {sym: df.copy() for sym, df in universe_bars.items()}
         self._min_alloc = min_alloc
         self._max_alloc = max_alloc
+        self._score_floor = score_floor
+        self._score_ceiling = score_ceiling
         self._rebalance_threshold = rebalance_threshold
         self._warmup_bars = warmup_bars
 
@@ -89,6 +112,12 @@ class SpyTiltStrategy:
     def reset(self) -> None:
         self._score_by_date = self._compute_score_series()
         self._bars_seen = 0
+
+    def _target_alloc(self, score: float) -> float:
+        span = self._score_ceiling - self._score_floor
+        norm = (score - self._score_floor) / span
+        norm = max(0.0, min(1.0, norm))
+        return self._min_alloc + norm * (self._max_alloc - self._min_alloc)
 
     def on_bar(
         self,
@@ -104,7 +133,7 @@ class SpyTiltStrategy:
 
         bar_date = date.date() if hasattr(date, "date") else date
         score = self._score_by_date.get(bar_date, 0.0)
-        target_alloc = self._min_alloc + score * (self._max_alloc - self._min_alloc)
+        target_alloc = self._target_alloc(score)
 
         close = float(row["close"])
         if close <= 0:

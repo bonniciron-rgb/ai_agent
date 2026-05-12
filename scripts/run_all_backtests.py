@@ -287,11 +287,15 @@ def run_spy_tilt_backtest(
     label: str,
     min_alloc: float = 0.5,
     max_alloc: float = 1.0,
+    score_ceiling: float = 1.0,
 ) -> dict:
     """Run SPY-tilt exposure-manager backtest using *signal* over *universe_price_data*.
 
-    Maps the average composite score across the universe to a SPY allocation
-    fraction in [min_alloc, max_alloc] and rebalances SPY accordingly.
+    Maps the (normalized) average composite score across the universe to a SPY
+    allocation fraction in [min_alloc, max_alloc] and rebalances SPY accordingly.
+    ``score_ceiling`` compresses the score→alloc mapping; for a 3-sub-signal
+    composite where 2 sub-signals usually abstain, the realistic universe-average
+    score peaks near ~0.30, so score_ceiling=0.30 restores full dynamic range.
     """
     filtered: dict[str, pd.DataFrame] = {}
     for sym, df in universe_price_data.items():
@@ -316,19 +320,34 @@ def run_spy_tilt_backtest(
         universe_bars=filtered,
         min_alloc=min_alloc,
         max_alloc=max_alloc,
+        score_ceiling=score_ceiling,
         rebalance_threshold=0.05,
         warmup_bars=50,
     )
     logger.info("[%s] pre-computing universe scores ...", label)
     result = run_backtest(spy_filtered, strategy, symbol="SPY", initial_capital=INITIAL_CAPITAL)
     p = metrics_summary(result.equity_curve, result.trades, benchmark=bench_close)
+    score_dist = sorted(strategy._score_by_date.values())
+    score_summary = {}
+    if score_dist:
+        n = len(score_dist)
+        score_summary = {
+            "min": round(score_dist[0], 4),
+            "median": round(score_dist[n // 2], 4),
+            "max": round(score_dist[-1], 4),
+        }
     return {
         "signal": label,
         "signal_name": signal.name,
         "signal_version": signal.version,
         "period": [START.isoformat(), END.isoformat()],
         "universe_symbols": list(filtered.keys()),
-        "spy_tilt": {"min_alloc": min_alloc, "max_alloc": max_alloc},
+        "spy_tilt": {
+            "min_alloc": min_alloc,
+            "max_alloc": max_alloc,
+            "score_ceiling": score_ceiling,
+            "score_distribution": score_summary,
+        },
         "metrics": {
             "sharpe": round(p.get("sharpe") or 0.0, 4),
             "cagr": round(p.get("cagr") or 0.0, 4),
@@ -468,6 +487,10 @@ def main() -> int:
                 label="SPY_tilt_50_100",
                 min_alloc=0.5,
                 max_alloc=1.0,
+                # composite per-symbol score is (A1+A2+B2)/3; A2/B2 mostly
+                # abstain, so universe-average peaks near ~0.30 — rescale so
+                # that maps to 100% SPY (see SpyTiltStrategy docstring)
+                score_ceiling=0.30,
             )
         )
 
