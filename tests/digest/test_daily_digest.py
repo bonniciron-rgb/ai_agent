@@ -268,6 +268,43 @@ def test_format_digest_html_empty(in_memory_engine) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Exposure-tilt section
+# ---------------------------------------------------------------------------
+
+
+def test_digest_includes_exposure_tilt(in_memory_engine) -> None:
+    from ai_agent.exposure.job import persist_snapshot
+    from ai_agent.exposure.tilt import TiltSnapshot
+
+    persist_snapshot(
+        TiltSnapshot(
+            as_of=DIGEST_DATE,
+            composite_score=0.09,
+            target_allocation=0.65,
+            n_symbols=11,
+            per_symbol_scores={"AAPL": 1.0},
+            score_ceiling=0.3,
+        ),
+        engine=in_memory_engine,
+    )
+    digest = aggregate_digest(DIGEST_DATE, THRESHOLD, engine=in_memory_engine)
+    assert digest.exposure_alloc_pct == 65
+    assert digest.exposure_composite == 0.09
+    assert digest.exposure_n_symbols == 11
+
+    html_out = format_digest_html(digest)
+    assert "Exposure tilt" in html_out
+    assert "65% SPY" in html_out
+    assert "+0.09" in html_out
+
+
+def test_digest_omits_exposure_tilt_when_no_snapshot(in_memory_engine) -> None:
+    digest = aggregate_digest(DIGEST_DATE, THRESHOLD, engine=in_memory_engine)
+    assert digest.exposure_alloc_pct is None
+    assert "Exposure tilt" not in format_digest_html(digest)
+
+
+# ---------------------------------------------------------------------------
 # Test 5: cost below threshold — no alert, one telegram call
 # ---------------------------------------------------------------------------
 

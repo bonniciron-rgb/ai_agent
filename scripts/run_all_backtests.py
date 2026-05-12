@@ -53,6 +53,10 @@ from ai_agent.backtest.metrics import equity_from_benchmark
 from ai_agent.backtest.metrics import summary as metrics_summary
 from ai_agent.backtest.spy_tilt import SpyTiltStrategy
 from ai_agent.data.finnhub_source import FinnhubSource
+
+# SECTOR_MAP is the single source of truth for the exposure universe; importing
+# it here keeps the backtest and the live tilt (ai_agent.exposure.job) in sync.
+from ai_agent.exposure.job import SECTOR_MAP
 from ai_agent.signals.analyst_revisions import (
     AnalystRevisionMomentumSignal,
     RecommendationSnapshot,
@@ -67,22 +71,6 @@ logger = logging.getLogger("run_all_backtests")
 
 # ── Universe & period ─────────────────────────────────────────────────────────
 
-# v4: removed defensive/pharma symbols that dragged A1 Sharpe negative
-# Dropped: JNJ (-0.47), PEP (-0.53), PFE (-0.60), PG (-0.40), UNH (-0.11), KO (0.24 marginal)
-# Retained: tech (XLK), financials (XLF), energy (XLE), momentum consumer-discretionary (XLY)
-SECTOR_MAP: dict[str, str] = {
-    "AAPL": "XLK",
-    "MSFT": "XLK",
-    "GOOGL": "XLK",
-    "JPM": "XLF",
-    "BAC": "XLF",
-    "GS": "XLF",
-    "XOM": "XLE",
-    "CVX": "XLE",
-    "AMZN": "XLY",
-    "HD": "XLY",
-    "TSLA": "XLY",
-}
 LARGE_CAP_SYMBOLS = sorted(SECTOR_MAP.keys())
 ETFS = sorted(set(SECTOR_MAP.values()))
 BENCHMARK = "SPY"

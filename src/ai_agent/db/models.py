@@ -258,6 +258,27 @@ class MacroRegimeSnapshot(SQLModel, table=True):
     created_at: datetime = Field(default_factory=_utcnow)
 
 
+class ExposureSnapshot(SQLModel, table=True):
+    """Daily exposure-manager decision: target SPY allocation from the composite signal.
+
+    Written by ai_agent.exposure.job.persist_snapshot (via scripts/tilt_snapshot.py).
+    Read by the daily digest and the /tilt dashboard.
+    """
+
+    id: int | None = Field(default=None, primary_key=True)
+    as_of: date = Field(index=True, unique=True)
+    composite_score: float  # universe-average composite score (raw)
+    target_allocation: float  # fraction of capital to hold in SPY (e.g. 0.65)
+    n_symbols: int  # universe symbols that had enough history to score
+    score_ceiling: float = 1.0
+    per_symbol_scores_json: str = Field(default="{}", max_length=2048)
+    created_at: datetime = Field(default_factory=_utcnow)
+
+    @property
+    def allocation_pct(self) -> int:
+        return round(self.target_allocation * 100)
+
+
 class SignalBacktest(SQLModel, table=True):
     """Persisted backtest result for a (signal_name, version, period) tuple.
 

@@ -184,6 +184,22 @@ This is **honest, deliverable, and has real edge** — not from alpha discovery,
 
 ---
 
+### Batch 20: Phase B.3 — Exposure Tilt Engine + Daily Digest Wiring [2026-05-12]
+**PR #63 (in progress)**
+
+| Component | Files | Status | Notes |
+|-----------|-------|--------|-------|
+| `ai_agent.exposure` package | `src/ai_agent/exposure/{tilt,job}.py` | ✅ | `score_to_allocation()` (shared formula — `SpyTiltStrategy` delegates to it), `TiltSnapshot` + `compute_tilt_snapshot()` (current allocation from latest bars), `tilt_summary_line()` (Telegram one-liner), `build_composite_signal()` / `make_snapshot()` (live A1+A2+B2 composite over the 11-symbol universe), `persist_snapshot()` / `latest_snapshot()` |
+| `ExposureSnapshot` DB model | `src/ai_agent/db/models.py` | ✅ | Daily target SPY allocation + composite score + per-symbol breakdown; upsert by `as_of` |
+| `SECTOR_MAP` single source of truth | `exposure/job.py` ← `run_all_backtests.py` imports it | ✅ | Backtest and live tilt can't disagree about the universe |
+| Daily digest section | `src/ai_agent/digest/daily_digest.py` | ✅ | "📈 Exposure tilt: 65% SPY (composite +0.09, 11 names)" — reads latest snapshot, gracefully omitted if none |
+| `scripts/tilt_snapshot.py` CLI | + `python -m ai_agent.exposure.job` | ✅ | Fetches latest bars (yfinance), builds sector_prices, persists an `ExposureSnapshot`; `--dry-run` to log only. Cron-able like `macro_regime.py` |
+| Tests | `tests/exposure/test_{tilt,job}.py`, digest tests | ✅ | 614 total passing |
+
+**Still pending in Phase B.3**: `app/tilt/page.tsx` dashboard + `app/api/tilt/route.ts` (need browser/visual QA), drawdown protection (auto-reduce to 50% on VIX > 30 / bear regime), Kelly-style sizing.
+
+---
+
 ### Batch 19: v4 Results — Phase B Exposure Manager Validated [2026-05-12]
 **Workflow run on main after PRs #59/#60/#61**
 
