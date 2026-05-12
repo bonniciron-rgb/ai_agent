@@ -2,6 +2,19 @@ name: signal-backtests
 
 on:
   workflow_dispatch:
+    inputs:
+      backtest_start:
+        description: "Backtest start date (YYYY-MM-DD). Blank = trailing window."
+        required: false
+        default: ""
+      backtest_end:
+        description: "Backtest end date (YYYY-MM-DD). Blank = today."
+        required: false
+        default: ""
+      backtest_lookback_days:
+        description: "Trailing window length in days (used when start is blank)."
+        required: false
+        default: "1460"
   schedule:
     # First Monday of every month at 07:00 UTC — keep validation fresh.
     - cron: "0 7 1-7 * 1"
@@ -17,6 +30,9 @@ jobs:
     env:
       FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
       SEC_EDGAR_USER_AGENT: ${{ vars.SEC_EDGAR_USER_AGENT || 'Ethera Trading research@etheratrading.example' }}
+      BACKTEST_START: ${{ inputs.backtest_start }}
+      BACKTEST_END: ${{ inputs.backtest_end }}
+      BACKTEST_LOOKBACK_DAYS: ${{ inputs.backtest_lookback_days || '1460' }}
 
     steps:
       - uses: actions/checkout@v4
