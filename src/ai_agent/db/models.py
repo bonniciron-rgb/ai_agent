@@ -279,6 +279,30 @@ class ExposureSnapshot(SQLModel, table=True):
         return round(self.target_allocation * 100)
 
 
+class DailyAnalysis(SQLModel, table=True):
+    """One row per daily-loop run — the audit trail behind 'no trade today'.
+
+    Written by ai_agent.loop.daily_loop on every live run, including when zero
+    proposals pass. Read by the /analysis page and the daily digest so the user
+    can always see what was considered and why nothing (or something) came out.
+    """
+
+    id: int | None = Field(default=None, primary_key=True)
+    as_of: date = Field(index=True, unique=True)
+    symbols_considered_json: str = Field(default="[]", max_length=4096)
+    proposals_generated: int = 0  # raw proposals from the agent (pre risk filter)
+    proposals_passed_risk: int = 0  # proposals that survived the risk rails
+    proposals_blocked_risk: int = 0  # proposals the risk rails rejected
+    agent_iterations: int = 0
+    summary: str = Field(default="", max_length=8000)  # the agent's final reasoning text
+    model: str = Field(default="unknown", max_length=64)
+    created_at: datetime = Field(default_factory=_utcnow)
+
+    @property
+    def has_proposals(self) -> bool:
+        return self.proposals_passed_risk > 0
+
+
 class SignalBacktest(SQLModel, table=True):
     """Persisted backtest result for a (signal_name, version, period) tuple.
 

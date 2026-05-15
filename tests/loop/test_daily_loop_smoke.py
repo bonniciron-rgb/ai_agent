@@ -24,7 +24,7 @@ from ai_agent.agent.proposals import TradeProposal
 from ai_agent.data.base import BarPoint, BarSeries
 from ai_agent.data.finnhub_source import NewsItem
 from ai_agent.db.engine import create_engine_from_url, init_schema
-from ai_agent.db.models import Bar, OrderSide, Proposal
+from ai_agent.db.models import Bar, DailyAnalysis, OrderSide, Proposal
 from ai_agent.db.settings_store import set_trading_halted
 from ai_agent.loop import daily_loop as dl
 from ai_agent.loop.bar_store import ingest_bars
@@ -197,6 +197,68 @@ def test_daily_loop_persists_passing_proposal(watchlist_path, _db, monkeypatch) 
         rows = session.exec(select(Proposal)).all()
         assert len(rows) == 1
         assert rows[0].symbol == "AAPL"
+        analysis = session.exec(select(DailyAnalysis)).all()
+        assert len(analysis) == 1
+        a = analysis[0]
+        assert a.as_of == date(2026, 5, 5)
+        assert a.proposals_generated == 1
+        assert a.proposals_passed_risk == 1
+        assert a.proposals_blocked_risk == 0
+        assert a.has_proposals
+
+
+def test_daily_loop_persists_analysis_when_no_proposals(watchlist_path, _db, monkeypatch) -> None:
+    """Agent returns nothing → still writes a DailyAnalysis row with the reasoning."""
+
+    def fake_run_agent(symbols, toolbox, **kwargs):
+        return SimpleNamespace(
+            proposals=[],
+            iterations=2,
+            input_tokens=0,
+            output_tokens=0,
+            cache_read_tokens=0,
+            cache_write_tokens=0,
+            stop_reason="end_turn",
+            model="claude-opus-4-7",
+            prompt_messages=[],
+            response_text="No qualifying setups today; broad indices extended, breadth weak.",
+        )
+
+    captured: dict = {}
+
+    async def _capture_digest(saved, settings, *, no_proposal_text=None):
+        captured["saved"] = saved
+        captured["no_proposal_text"] = no_proposal_text
+
+    monkeypatch.setattr(dl, "run_agent", fake_run_agent)
+    monkeypatch.setattr(dl, "_send_digest", _capture_digest)
+
+    run(
+        dry_run=False,
+        ohlcv_source=FakeOhlcv(),
+        t212_client=FakeT212(),
+        anthropic_client=None,
+        finnhub_source=None,
+        today=date(2026, 5, 6),
+    )
+
+    with Session(_db) as session:
+        assert session.exec(select(Proposal)).all() == []
+        analysis = session.exec(select(DailyAnalysis)).all()
+        assert len(analysis) == 1
+        a = analysis[0]
+        assert a.as_of == date(2026, 5, 6)
+        assert a.proposals_generated == 0
+        assert a.proposals_passed_risk == 0
+        assert not a.has_proposals
+        assert "No qualifying setups today" in a.summary
+        assert a.agent_iterations == 2
+
+    # The 'no trade' Telegram message gets the reasoning blurb.
+    assert captured["saved"] == []
+    assert captured["no_proposal_text"] is not None
+    assert "No qualifying setups today" in captured["no_proposal_text"]
+    assert "/analysis" in captured["no_proposal_text"]
 
 
 def test_daily_loop_halt_skips_run(watchlist_path) -> None:

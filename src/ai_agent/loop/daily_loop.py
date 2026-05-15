@@ -21,6 +21,7 @@ Run locally::
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import sys
@@ -29,10 +30,13 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+from sqlmodel import select
+
 from ai_agent.agent.runner import AgentResult, run_agent
 from ai_agent.agent.tools import Toolbox
 from ai_agent.db.engine import get_session, init_schema
 from ai_agent.db.models import (
+    DailyAnalysis,
     OrderSide,
     Proposal,
     ProposalReasoning,
@@ -268,8 +272,52 @@ def _save_proposals(proposals, agent_result: AgentResult | None = None) -> list[
     return saved
 
 
-async def _send_digest(saved_proposals: list[Proposal], settings) -> None:
-    """Send the Telegram digest for saved proposals."""
+def _save_daily_analysis(
+    *,
+    as_of: date,
+    symbols: list[str],
+    agent_result: AgentResult,
+    passed: int,
+    blocked: int,
+) -> DailyAnalysis:
+    """Upsert the DailyAnalysis audit row for *as_of* (written every live run)."""
+    summary = (getattr(agent_result, "response_text", "") or "")[:8000]
+    model = getattr(agent_result, "model", "unknown") or "unknown"
+    generated = len(getattr(agent_result, "proposals", []) or [])
+    iterations = getattr(agent_result, "iterations", 0) or 0
+
+    with get_session() as session:
+        row = session.exec(select(DailyAnalysis).where(DailyAnalysis.as_of == as_of)).first()
+        if row is None:
+            row = DailyAnalysis(as_of=as_of)
+            session.add(row)
+        row.symbols_considered_json = json.dumps(list(symbols))
+        row.proposals_generated = generated
+        row.proposals_passed_risk = passed
+        row.proposals_blocked_risk = blocked
+        row.agent_iterations = iterations
+        row.summary = summary
+        row.model = model
+        session.commit()
+        session.refresh(row)
+        return row
+
+
+def _no_proposal_summary(analysis: DailyAnalysis) -> str:
+    """Short human line for the 'no trade today' Telegram message."""
+    head = analysis.summary.strip().splitlines()
+    first = head[0][:400] if head else "No qualifying setups found."
+    return (
+        f"{first}\n\n({analysis.proposals_generated} ideas considered, "
+        f"{analysis.proposals_blocked_risk} blocked by risk rails — "
+        "full detail on the /analysis page.)"
+    )
+
+
+async def _send_digest(
+    saved_proposals: list[Proposal], settings, *, no_proposal_text: str | None = None
+) -> None:
+    """Send the Telegram digest for saved proposals (or the 'no trade' note)."""
     try:
         from telegram import Bot
     except ImportError:
@@ -299,7 +347,7 @@ async def _send_digest(saved_proposals: list[Proposal], settings) -> None:
         for p in saved_proposals
     ]
     async with bot:
-        await send_proposals(bot, chat_id, proposal_dicts)
+        await send_proposals(bot, chat_id, proposal_dicts, no_proposal_text=no_proposal_text)
 
 
 # ---------------------------------------------------------------------------
@@ -413,6 +461,8 @@ def run(
         else:
             logger.info("Proposal %s blocked by risk rail: %s", proposal.symbol, rail.reason)
 
+    blocked = len(result.proposals) - len(passing)
+    as_of = today or datetime.now(UTC).date()
     logger.info("%d/%d proposals passed risk rails", len(passing), len(result.proposals))
 
     # 8. Persist + digest
@@ -426,10 +476,25 @@ def run(
             logger.info("[dry_run] Wrote reasoning + shadow rows for %d proposals", len(passing))
         return
 
+    analysis = _save_daily_analysis(
+        as_of=as_of,
+        symbols=watchlist.symbols,
+        agent_result=result,
+        passed=len(passing),
+        blocked=blocked,
+    )
+    logger.info(
+        "Saved DailyAnalysis for %s (generated=%d passed=%d)",
+        as_of,
+        analysis.proposals_generated,
+        analysis.proposals_passed_risk,
+    )
+
     saved = _save_proposals(passing, agent_result=result)
     logger.info("Saved %d proposals to DB", len(saved))
 
-    asyncio.run(_send_digest(saved, settings))
+    no_proposal_text = _no_proposal_summary(analysis) if not saved else None
+    asyncio.run(_send_digest(saved, settings, no_proposal_text=no_proposal_text))
     logger.info("Telegram digest sent")
 
 

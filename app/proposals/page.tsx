@@ -4,7 +4,9 @@ import { Nav } from "@/app/components/Nav";
 import { StatusPill } from "@/app/components/StatusPill";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth";
 import {
+  latestDailyAnalysis,
   listProposalsFiltered,
+  type DailyAnalysis,
   type ProposalFilters,
   type ProposalStatus,
 } from "@/lib/queries";
@@ -48,11 +50,15 @@ export default async function ProposalsPage({
     !Array.isArray(proposals) && "error" in proposals ? proposals.error : null;
   const rows = Array.isArray(proposals) ? proposals : [];
 
+  const todaysAnalysis = await latestDailyAnalysis().catch(() => null);
+
   return (
     <>
       <Nav session={session} />
       <main className="mx-auto max-w-5xl px-6 py-10">
         <h1 className="text-2xl font-semibold tracking-tight">Proposals</h1>
+
+        <TodaysAnalysisCard analysis={todaysAnalysis} />
 
         <form
           method="get"
@@ -206,5 +212,42 @@ function Field({
       </span>
       {children}
     </label>
+  );
+}
+
+function TodaysAnalysisCard({ analysis }: { analysis: DailyAnalysis | null }) {
+  if (!analysis) return null;
+  const traded = analysis.proposals_passed_risk > 0;
+  const firstLine =
+    analysis.summary.trim().split("\n")[0]?.slice(0, 280) ||
+    (traded ? "Proposed trade(s) today." : "No qualifying setups today.");
+  return (
+    <div className="mt-4 rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-medium text-zinc-200">
+          Today&apos;s analysis · {analysis.as_of}
+        </h2>
+        <span
+          className={`rounded px-2 py-0.5 text-xs font-medium ${
+            traded
+              ? "bg-emerald-900 text-emerald-200"
+              : "bg-zinc-800 text-zinc-300"
+          }`}
+        >
+          {traded
+            ? `${analysis.proposals_passed_risk} proposal${analysis.proposals_passed_risk === 1 ? "" : "s"}`
+            : "no trade"}
+        </span>
+      </div>
+      <p className="mt-2 text-sm text-zinc-400">{firstLine}</p>
+      <div className="mt-2 flex items-center gap-4 text-xs text-zinc-600">
+        <span>
+          {analysis.proposals_generated} considered · {analysis.proposals_blocked_risk} risk-blocked
+        </span>
+        <a href="/analysis" className="text-emerald-400 hover:underline">
+          Full analysis →
+        </a>
+      </div>
+    </div>
   );
 }

@@ -17,6 +17,8 @@ async def send_proposals(
     bot,  # telegram.Bot instance
     chat_id: str,
     proposals: list[dict],
+    *,
+    no_proposal_text: str | None = None,
 ) -> list[int]:
     """Send each proposal as an inline-keyboard message.
 
@@ -29,6 +31,9 @@ async def send_proposals(
     proposals:
         List of dicts with keys: id, symbol, side, quantity, limit_price,
         stop_price (optional), rationale, confidence, regime (optional).
+    no_proposal_text:
+        Optional reasoning blurb appended to the "no trade today" message
+        (typically the agent's summary + a pointer to the /analysis page).
 
     Returns
     -------
@@ -37,10 +42,10 @@ async def send_proposals(
     sent_ids: list[int] = []
 
     if not proposals:
-        await bot.send_message(
-            chat_id=chat_id,
-            text="📭 No trade proposals today — no signals met the criteria.",
-        )
+        text = "📭 No trade proposals today — no signals met the criteria."
+        if no_proposal_text:
+            text += f"\n\n{no_proposal_text}"
+        await bot.send_message(chat_id=chat_id, text=text)
         return sent_ids
 
     for p in proposals:
