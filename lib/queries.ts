@@ -457,3 +457,68 @@ export async function listClosedShadowPositions(
     LIMIT ${limit}
   `;
 }
+
+export interface DailyAnalysis {
+  id: number;
+  as_of: string; // YYYY-MM-DD
+  symbols_considered: string[];
+  proposals_generated: number;
+  proposals_passed_risk: number;
+  proposals_blocked_risk: number;
+  agent_iterations: number;
+  summary: string;
+  model: string;
+  created_at: Date;
+}
+
+interface DailyAnalysisRaw {
+  id: number;
+  as_of: string;
+  symbols_considered_json: string;
+  proposals_generated: number;
+  proposals_passed_risk: number;
+  proposals_blocked_risk: number;
+  agent_iterations: number;
+  summary: string;
+  model: string;
+  created_at: Date;
+}
+
+function parseSymbolsJson(json: string): string[] {
+  try {
+    const v = JSON.parse(json);
+    return Array.isArray(v) ? v.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function latestDailyAnalysis(): Promise<DailyAnalysis | null> {
+  const sql = getSql();
+  const rows = await sql<DailyAnalysisRaw[]>`
+    SELECT
+      id, as_of::text AS as_of, symbols_considered_json,
+      proposals_generated::int AS proposals_generated,
+      proposals_passed_risk::int AS proposals_passed_risk,
+      proposals_blocked_risk::int AS proposals_blocked_risk,
+      agent_iterations::int AS agent_iterations,
+      summary, model, created_at
+    FROM dailyanalysis
+    ORDER BY as_of DESC
+    LIMIT 1
+  `;
+  if (rows.length === 0) return null;
+  const r = rows[0];
+  return {
+    id: r.id,
+    as_of: r.as_of,
+    symbols_considered: parseSymbolsJson(r.symbols_considered_json),
+    proposals_generated: r.proposals_generated,
+    proposals_passed_risk: r.proposals_passed_risk,
+    proposals_blocked_risk: r.proposals_blocked_risk,
+    agent_iterations: r.agent_iterations,
+    summary: r.summary,
+    model: r.model,
+    created_at: r.created_at,
+  };
+}
