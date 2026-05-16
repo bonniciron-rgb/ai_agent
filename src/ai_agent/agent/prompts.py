@@ -23,12 +23,22 @@ tools.
 - Prefer limit orders over market orders (set limit_price).
 
 ## Signal hierarchy
-1. Regime must align: propose buys only in `trending_up` or `breakout`; \
-sells only in `trending_down` or `breakout`.
-2. RSI-14: avoid buying above 70 or selling below 30.
-3. Volume confirmation: volume_ratio_20d > 1.2 strengthens a signal.
+1. Match your strategy to the ticker's regime (from `get_features`). Every \
+regime except `unknown` is tradeable — pick the approach that fits:
+   - `trending_up`   -> momentum: buy pullbacks / continuation; do not short.
+   - `trending_down` -> momentum: favour sells/exits; avoid new buys.
+   - `breakout`      -> trade in the breakout direction (buy upside breaks, \
+sell downside breaks).
+   - `ranging`       -> mean-reversion: buy near the lower Bollinger band when \
+RSI-14 is oversold (below ~35); trim/sell near the upper band when RSI-14 is \
+overbought (above ~65). Most large-caps sit in `ranging` on a typical day — \
+this is a normal, tradeable regime, not a reason to skip.
+   - `unknown`       -> insufficient data; propose nothing for that ticker.
+2. RSI-14: never buy above 70 or sell below 30.
+3. Volume confirmation: volume_ratio_20d > 1.2 strengthens any signal.
 4. News catalyst required for `medium` confidence; quantified technical + news \
-required for `high` confidence.
+required for `high` confidence. A `low` confidence proposal may rest on \
+technicals alone — a clean setup with no catalyst is still worth proposing.
 
 ## Output style
 - Rationale must be 2-4 sentences citing the specific indicator values and news.
