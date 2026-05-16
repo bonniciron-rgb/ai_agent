@@ -1,6 +1,6 @@
 # Ethera Trading — Project Status & Roadmap
 
-**Last updated**: 2026-05-16 (fix: regime gate loosened — agent can propose again)
+**Last updated**: 2026-05-16 (Connections page + nav redesign)
 **Maintained by**: Claude (Lead, Opus for design/architecture)
 **Team**: Sonnet (implementation/distribution), Tiger teams (background development)
 **Daily Sync**: This file is the single source of truth for standups and context preservation.
@@ -192,6 +192,27 @@ So the *deliverable, honest* product is currently "**a low-beta equity sleeve**"
 | Test suite | `tests/signals/test_analyst_revisions.py` | ✅ | 28 tests across 8 classes (streak, plateau, stale, custom thresholds, empty data, formula, attributes) |
 
 **Third real signal through C1.** Based on Hawkins et al. analyst revision momentum anomaly. Finnhub `/stock/recommendation` integrated via `_inject_recommendations()`.
+
+---
+
+### Batch 23: Connections Page + Nav Redesign [2026-05-16]
+**PR #67**
+
+New **Connections** dashboard page (`/connections`):
+- **Test T212 connection** — `GET /api/connection/t212` calls the T212 cash
+  endpoint with the dashboard's `T212_API_KEY`; shows free/invested/total on
+  success or the exact HTTP error (e.g. 401 = bad/expired key). Read-only.
+- **Sync now** — `POST /api/sync` triggers the `daily-trade-loop` workflow via
+  GitHub `workflow_dispatch`; dry-run by default. Needs `GITHUB_DISPATCH_TOKEN`
+  in Vercel env.
+
+Nav redesign: the flat 12-item bar was too cluttered. Now 4 daily-use links
+(Dashboard, Proposals, Analysis, Orders) stay visible; the rest move under a
+grouped **More** dropdown (Markets / Tracking / System). Mobile drawer mirrors
+the grouping.
+
+Note: T212 env vars must be set in **Vercel** (separate from the GitHub Actions
+secrets the cron uses). `tsc` clean; UI not browser-tested in this environment.
 
 ---
 
