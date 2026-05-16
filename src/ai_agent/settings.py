@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     anthropic_api_key: SecretStr = Field(default=SecretStr(""))
 
     t212_api_key: SecretStr = Field(default=SecretStr(""))
+    t212_api_secret: SecretStr = Field(default=SecretStr(""))
     t212_env: T212Env = T212Env.demo
 
     telegram_bot_token: SecretStr = Field(default=SecretStr(""))
