@@ -1,6 +1,6 @@
 # Ethera Trading — Project Status & Roadmap
 
-**Last updated**: 2026-05-16 (Connections page + nav redesign)
+**Last updated**: 2026-05-16 (Fix empty agent analysis — data-aware screening)
 **Maintained by**: Claude (Lead, Opus for design/architecture)
 **Team**: Sonnet (implementation/distribution), Tiger teams (background development)
 **Daily Sync**: This file is the single source of truth for standups and context preservation.
@@ -192,6 +192,15 @@ So the *deliverable, honest* product is currently "**a low-beta equity sleeve**"
 | Test suite | `tests/signals/test_analyst_revisions.py` | ✅ | 28 tests across 8 classes (streak, plateau, stale, custom thresholds, empty data, formula, attributes) |
 
 **Third real signal through C1.** Based on Hawkins et al. analyst revision momentum anomaly. Finnhub `/stock/recommendation` integrated via `_inject_recommendations()`.
+
+---
+
+### Batch 25: Fix Empty Agent Analysis — Data-Aware Screening [2026-05-16]
+
+Two-part fix for the confirmed bug causing every daily analysis row to show 0 iterations, no reasoning, and 0 proposals:
+
+- **Part A (screening.py + runner.py):** Before calling Haiku screening, fetch `get_features` for each watchlist symbol and pass the JSON context to `build_screening_user_message`. Haiku now sees real price/indicator data (close, regime, RSI, etc.) instead of bare ticker names, so it can make meaningful shortlist decisions.
+- **Part B (runner.py):** When Haiku returns an empty shortlist, fall back to running the Opus decision pass on the full watchlist (`stop_reason="screening_empty_fallback"`) instead of returning early. The decision pass now always runs, guaranteeing real reasoning and proposals are recorded every day.
 
 ---
 

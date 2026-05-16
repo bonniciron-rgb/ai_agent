@@ -1,11 +1,12 @@
 """Tests for m18 tiered LLM routing (Haiku screening → Opus decision).
 
 Covers:
-  - Empty shortlist → Stage 2 skipped → zero proposals
+  - Empty shortlist → Stage 2 falls back to full watchlist (not skipped)
   - Shortlist of 3 → Stage 2 runs once with exactly those 3 in context
   - cache_control header present on static system blocks for both passes
   - Cost calculation handles cache_read_tokens and cache_creation_tokens
   - Integration: full daily loop dry-run uses screening model then decision model
+  - build_screening_user_message includes per-symbol context when provided
 """
 
 from __future__ import annotations
@@ -106,21 +107,22 @@ def _decision_end_turn() -> FakeResponse:
 
 
 # ---------------------------------------------------------------------------
-# Test: empty shortlist → Stage 2 skipped → zero proposals
+# Test: empty shortlist → Stage 2 falls back to full watchlist
 # ---------------------------------------------------------------------------
 
 
-def test_empty_shortlist_skips_decision_pass() -> None:
-    """When Haiku returns an empty shortlist, Stage 2 must not be called."""
+def test_empty_shortlist_falls_back_to_full_watchlist() -> None:
+    """When Haiku returns an empty shortlist, Stage 2 must run on the full watchlist."""
+    watchlist = ["AAPL", "MSFT", "GOOG"]
     client = RecordingClient(
         responses=[
-            _screening_response([]),  # Stage 1: empty
-            # Stage 2 must NOT be reached — client has no more responses
+            _screening_response([]),  # Stage 1: empty shortlist
+            _decision_end_turn(),  # Stage 2 must still run
         ]
     )
 
     result = run_agent(
-        watchlist=["AAPL", "MSFT", "GOOG"],
+        watchlist=watchlist,
         toolbox=_simple_toolbox(),
         client=client,
         tiered=True,
@@ -128,10 +130,15 @@ def test_empty_shortlist_skips_decision_pass() -> None:
         decision_model="claude-opus-4-7",
     )
 
-    assert result.proposals == []
-    assert result.stop_reason == "screening_empty"
-    # Only 1 API call (screening); decision must not have been called
-    assert len(client.calls) == 1
+    assert result.stop_reason == "screening_empty_fallback"
+    assert result.iterations >= 1
+    # Both screening and decision API calls must have been made
+    assert len(client.calls) == 2
+    # Decision pass user message must contain all watchlist symbols
+    decision_call = client.calls[1]
+    decision_user_msg = decision_call["messages"][0]["content"]
+    for sym in watchlist:
+        assert sym in decision_user_msg, f"{sym} must appear in fallback decision user message"
 
 
 # ---------------------------------------------------------------------------
@@ -236,7 +243,7 @@ def test_shortlist_max_is_enforced() -> None:
 
 def test_screening_pass_system_has_cache_control() -> None:
     """The screening pass must send cache_control on the static system blocks."""
-    client = RecordingClient(responses=[_screening_response([])])
+    client = RecordingClient(responses=[_screening_response([]), _decision_end_turn()])
 
     run_agent(
         watchlist=["AAPL"],
@@ -288,7 +295,7 @@ def test_decision_pass_system_has_cache_control() -> None:
 
 def test_screening_pass_has_no_tools() -> None:
     """The screening API call must not carry tool definitions."""
-    client = RecordingClient(responses=[_screening_response([])])
+    client = RecordingClient(responses=[_screening_response([]), _decision_end_turn()])
 
     run_agent(
         watchlist=["AAPL"],
@@ -439,3 +446,41 @@ def test_token_accumulation_tiered() -> None:
     assert result.screening_cache_read_tokens == 10
     assert result.decision_input_tokens == 500
     assert result.decision_cache_read_tokens == 80
+
+
+# ---------------------------------------------------------------------------
+# Test: build_screening_user_message includes per-symbol context
+# ---------------------------------------------------------------------------
+
+
+def test_build_screening_user_message_includes_symbol_context() -> None:
+    """When symbol_context is provided, each symbol appears with its context line."""
+    from ai_agent.agent.screening import build_screening_user_message
+
+    watchlist = ["AAPL", "MSFT", "GOOG"]
+    symbol_context = {
+        "AAPL": '{"close": 195.2, "regime": "ranging", "rsi_14": 55.0}',
+        "MSFT": '{"close": 420.1, "regime": "trending_up", "rsi_14": 62.3}',
+        # GOOG intentionally missing — should still appear as bare symbol
+    }
+
+    msg = build_screening_user_message(watchlist, symbol_context)
+
+    assert 'AAPL: {"close": 195.2' in msg
+    assert 'MSFT: {"close": 420.1' in msg
+    assert "GOOG" in msg
+    # Without context, bare symbol should still render
+    assert "ranging" in msg
+    assert "trending_up" in msg
+
+
+def test_build_screening_user_message_no_context_backward_compatible() -> None:
+    """Without symbol_context the message format is unchanged."""
+    from ai_agent.agent.screening import build_screening_user_message
+
+    msg = build_screening_user_message(["AAPL", "MSFT"])
+
+    assert "AAPL" in msg
+    assert "MSFT" in msg
+    # Original compact comma-separated format
+    assert "AAPL, MSFT" in msg

@@ -178,8 +178,8 @@ def test_daily_loop_tiered_uses_correct_models(watchlist_path, monkeypatch) -> N
         assert cached, f"{call_name} system must have cached block(s)"
 
 
-def test_daily_loop_tiered_empty_shortlist_no_proposals(watchlist_path, monkeypatch) -> None:
-    """When screening returns empty, no decision pass runs and 0 proposals saved."""
+def test_daily_loop_tiered_empty_shortlist_falls_back(watchlist_path, monkeypatch) -> None:
+    """When screening returns empty, the decision pass runs on the full watchlist."""
     client = _EmptyShortlistClient()
 
     monkeypatch.setattr(dl, "run_agent", _make_patched_run_agent(client))
@@ -193,8 +193,10 @@ def test_daily_loop_tiered_empty_shortlist_no_proposals(watchlist_path, monkeypa
         today=date(2026, 5, 5),
     )
 
-    # Only 1 call (screening); no decision call
-    assert len(client.calls) == 1, f"Expected 1 API call, got {len(client.calls)}"
+    # 2 calls: 1 screening + 1 decision fallback on full watchlist
+    assert len(client.calls) == 2, f"Expected 2 API calls, got {len(client.calls)}"
+    assert client.calls[0]["model"] == "claude-haiku-4-5-20251001"
+    assert client.calls[1]["model"] == "claude-opus-4-7"
 
 
 # ---------------------------------------------------------------------------
@@ -221,21 +223,38 @@ def _make_patched_run_agent(recording_client):
 
 
 class _EmptyShortlistClient:
-    """Always returns an empty shortlist (one call only)."""
+    """Returns empty shortlist on screening; end_turn on decision fallback."""
 
     def __init__(self) -> None:
         self.calls: list[dict] = []
+        self._call_count = 0
 
     def create_message(self, **kwargs) -> SimpleNamespace:
         self.calls.append({"model": kwargs["model"], "system": kwargs.get("system")})
-        payload = json.dumps({"shortlist": []})
+        self._call_count += 1
+
+        if self._call_count == 1:
+            # Screening: return empty shortlist
+            payload = json.dumps({"shortlist": []})
+            return SimpleNamespace(
+                content=[SimpleNamespace(type="text", text=payload)],
+                stop_reason="end_turn",
+                usage=SimpleNamespace(
+                    input_tokens=30,
+                    output_tokens=10,
+                    cache_read_input_tokens=0,
+                    cache_creation_input_tokens=5,
+                ),
+            )
+
+        # Decision fallback: end_turn immediately with no proposals
         return SimpleNamespace(
-            content=[SimpleNamespace(type="text", text=payload)],
+            content=[SimpleNamespace(type="text", text="No trades today.")],
             stop_reason="end_turn",
             usage=SimpleNamespace(
-                input_tokens=30,
-                output_tokens=10,
+                input_tokens=100,
+                output_tokens=20,
                 cache_read_input_tokens=0,
-                cache_creation_input_tokens=5,
+                cache_creation_input_tokens=0,
             ),
         )

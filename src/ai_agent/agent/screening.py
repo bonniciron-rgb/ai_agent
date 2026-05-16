@@ -55,7 +55,21 @@ Return ONLY the JSON object — no markdown fences, no commentary.
 """
 
 
-def build_screening_user_message(watchlist: list[str]) -> str:
+def build_screening_user_message(
+    watchlist: list[str],
+    symbol_context: dict[str, str] | None = None,
+) -> str:
+    if symbol_context:
+        lines = []
+        for sym in watchlist:
+            ctx = symbol_context.get(sym)
+            lines.append(f"{sym}: {ctx}" if ctx else sym)
+        symbols_block = "\n".join(lines)
+        return (
+            f"Watchlist ({len(watchlist)} symbols):\n{symbols_block}\n\n"
+            "Rank these symbols by same-day trading conviction. "
+            "Return only your JSON shortlist."
+        )
     tickers = ", ".join(watchlist) if watchlist else "(empty)"
     return (
         f"Watchlist ({len(watchlist)} symbols): {tickers}\n\n"
@@ -112,6 +126,7 @@ def run_screening(
     model: str,
     max_tokens: int = 1024,
     max_tickers: int = 5,
+    symbol_context: dict[str, str] | None = None,
 ) -> ScreeningResult:
     """Call Haiku with the full watchlist; return the shortlist.
 
@@ -137,7 +152,7 @@ def run_screening(
     ]
 
     messages = [
-        {"role": "user", "content": build_screening_user_message(watchlist)},
+        {"role": "user", "content": build_screening_user_message(watchlist, symbol_context)},
     ]
 
     try:

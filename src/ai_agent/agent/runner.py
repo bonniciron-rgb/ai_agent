@@ -279,12 +279,21 @@ def _run_tiered(
 
     screening_client = _ScreeningClientAdapter(client)
 
+    symbol_context: dict[str, str] = {}
+    for sym in watchlist:
+        try:
+            feats = toolbox.get_features({"symbol": sym})
+            symbol_context[sym] = json.dumps(feats, default=str)[:600]
+        except Exception as exc:
+            logger.warning("Could not fetch features for %s during screening: %s", sym, exc)
+
     screening_result = run_screening(
         watchlist,
         client=screening_client,  # type: ignore[arg-type]
         model=screening_model,
         max_tokens=1024,
         max_tickers=shortlist_max,
+        symbol_context=symbol_context or None,
     )
 
     # Build result seeded with screening token counts
@@ -300,12 +309,16 @@ def _run_tiered(
         cache_write_tokens=screening_result.cache_creation_tokens,
     )
 
+    used_fallback = False
     if not screening_result.shortlist:
-        logger.info("Screening returned empty shortlist — skipping decision pass")
-        result.stop_reason = "screening_empty"
-        return result
-
-    shortlist = [e.symbol for e in screening_result.shortlist]
+        logger.info(
+            "Screening returned empty shortlist — running decision pass on full watchlist (%d symbols)",
+            len(watchlist),
+        )
+        used_fallback = True
+        shortlist = list(watchlist)
+    else:
+        shortlist = [e.symbol for e in screening_result.shortlist]
     logger.info("Decision pass on shortlist (%d symbols): %s", len(shortlist), shortlist)
 
     decision = _run_decision_pass(
@@ -320,7 +333,7 @@ def _run_tiered(
     result.model = decision_model
     result.proposals = decision.proposals
     result.iterations = decision.iterations
-    result.stop_reason = decision.stop_reason
+    result.stop_reason = "screening_empty_fallback" if used_fallback else decision.stop_reason
     result.prompt_messages = decision.prompt_messages
     result.response_text = decision.response_text
     result.input_tokens += decision.input_tokens
