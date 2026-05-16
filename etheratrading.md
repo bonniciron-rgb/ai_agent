@@ -195,6 +195,26 @@ So the *deliverable, honest* product is currently "**a low-beta equity sleeve**"
 
 ---
 
+### Batch 26: Portfolio Page — Live T212 Holdings + Watchlist Sync [2026-05-16]
+**PR (draft)**
+
+New **Portfolio** page surfacing the live Trading 212 account so held symbols
+can flow into the agent's watchlist:
+
+- **`app/api/portfolio/route.ts`** — GET route. Fetches `/api/v0/equity/account/cash`
+  and `/api/v0/equity/portfolio` in parallel via HTTP Basic auth, returns cash
+  (free/invested/total) + positions. Each position is flagged `inWatchlist` by
+  cross-referencing the `watchlistticker` table. Strips the T212 venue suffix
+  (`AAPL_US_EQ` → `AAPL`). Surfaces config/401 problems as `ok:false` + message.
+- **`app/portfolio/page.tsx` + `PortfolioClient.tsx`** — account summary cards
+  + positions table with per-position P&L (£ and %). A one-click **"Add holdings
+  to watchlist"** button POSTs each untracked symbol to `/api/watchlist`
+  (handles 409 "already exists" gracefully), so holdings are reflected in the
+  watchlist immediately.
+- **`Nav.tsx`** — "Portfolio" added to the primary nav.
+
+---
+
 ### Batch 25: Fix Empty Agent Analysis — Data-Aware Screening [2026-05-16]
 **PR #69**
 
