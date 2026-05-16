@@ -196,11 +196,38 @@ So the *deliverable, honest* product is currently "**a low-beta equity sleeve**"
 ---
 
 ### Batch 25: Fix Empty Agent Analysis — Data-Aware Screening [2026-05-16]
+**PR #69**
 
 Two-part fix for the confirmed bug causing every daily analysis row to show 0 iterations, no reasoning, and 0 proposals:
 
 - **Part A (screening.py + runner.py):** Before calling Haiku screening, fetch `get_features` for each watchlist symbol and pass the JSON context to `build_screening_user_message`. Haiku now sees real price/indicator data (close, regime, RSI, etc.) instead of bare ticker names, so it can make meaningful shortlist decisions.
 - **Part B (runner.py):** When Haiku returns an empty shortlist, fall back to running the Opus decision pass on the full watchlist (`stop_reason="screening_empty_fallback"`) instead of returning early. The decision pass now always runs, guaranteeing real reasoning and proposals are recorded every day.
+
+---
+
+### Batch 24: Fix T212 Auth — HTTP Basic (key + secret) [2026-05-16]
+**PR #68**
+
+Root cause of the persistent `401`s when connecting Trading 212: the API was
+**updated** to use **HTTP Basic auth** — `Authorization: Basic base64(API_KEY:API_SECRET)`
+— but `t212_client.py` was built against the old single-raw-key scheme
+(`Authorization: <key>`). Confirmed against docs.trading212.com/api: the key is
+the username, the secret is the password. (Also confirmed the API supports
+**Invest + Stocks ISA** — an earlier claim that ISA was unsupported was wrong.)
+
+Changes:
+- `T212Client.__init__` takes `api_secret`; builds `Basic base64(key:secret)`,
+  `.strip()`-ing both halves (guards against env-var newline — a 401 cause).
+- `settings.py`: new `t212_api_secret`. Call sites (`reconciliation.py`,
+  `daily_loop.py`) and workflows (`daily.yml`, `reconcile.yml`) pass it.
+- Dashboard `/api/connection/t212`: builds the Basic header; needs both
+  `T212_API_KEY` + `T212_API_SECRET` in Vercel env.
+- `.env.example` documents both halves.
+
+**User action:** set `T212_API_SECRET` (the secret) alongside `T212_API_KEY`
+(the key id) in Vercel env *and* GitHub Actions secrets, then redeploy.
+
+617 tests passing; `tsc` clean.
 
 ---
 

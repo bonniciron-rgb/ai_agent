@@ -3,15 +3,23 @@
 Supports both demo and live environments via ``base_url``.
 All methods raise ``T212Error`` on non-2xx responses.
 
+Authentication
+--------------
+The Trading 212 API uses HTTP Basic auth: the API *key* is the username and
+the API *secret* is the password. The ``Authorization`` header is
+``Basic <base64(api_key:api_secret)>``. Both halves are required — a raw key
+alone returns 401.
+
 Usage
 -----
-client = T212Client(api_key="...", base_url="https://demo.trading212.com")
+client = T212Client(api_key="...", api_secret="...", base_url="https://demo.trading212.com")
 positions = client.get_positions()
 order = client.place_limit_order("AAPL_US_EQ", quantity=Decimal("5"), limit_price=Decimal("175"))
 """
 
 from __future__ import annotations
 
+import base64
 import logging
 from decimal import Decimal
 from typing import Any
@@ -50,7 +58,10 @@ class T212Client:
     Parameters
     ----------
     api_key:
-        Trading 212 API key (demo or live).
+        Trading 212 API key (the "username" half of the Basic-auth pair).
+    api_secret:
+        Trading 212 API secret (the "password" half). Required for live calls;
+        defaults to "" only so test code with a mock transport can omit it.
     base_url:
         ``https://demo.trading212.com`` or ``https://live.trading212.com``.
     http_client:
@@ -60,11 +71,16 @@ class T212Client:
     def __init__(
         self,
         api_key: str,
+        api_secret: str = "",
         base_url: str = "https://demo.trading212.com",
         http_client: httpx.Client | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
-        self._headers = {"Authorization": api_key, "Content-Type": "application/json"}
+        # HTTP Basic auth — base64(api_key:api_secret). .strip() guards against a
+        # stray newline/space pasted into an env var (a common 401 cause).
+        raw = f"{api_key.strip()}:{api_secret.strip()}"
+        token = base64.b64encode(raw.encode("utf-8")).decode("ascii")
+        self._headers = {"Authorization": f"Basic {token}", "Content-Type": "application/json"}
         self._http = http_client or httpx.Client(
             base_url=self._base_url,
             headers=self._headers,
