@@ -225,3 +225,25 @@ def test_raises_t212_error_on_401() -> None:
     with pytest.raises(T212Error) as exc_info:
         client.get_cash()
     assert exc_info.value.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Tests: HTTP Basic authentication header
+# ---------------------------------------------------------------------------
+
+
+def test_basic_auth_header_built_from_key_and_secret() -> None:
+    import base64
+
+    client = T212Client(api_key="mykey", api_secret="mysecret")
+    expected = "Basic " + base64.b64encode(b"mykey:mysecret").decode()
+    assert client._headers["Authorization"] == expected
+
+
+def test_basic_auth_strips_whitespace_from_credentials() -> None:
+    import base64
+
+    # A stray newline/space pasted into an env var must not break the header.
+    client = T212Client(api_key="  mykey\n", api_secret=" mysecret ")
+    expected = "Basic " + base64.b64encode(b"mykey:mysecret").decode()
+    assert client._headers["Authorization"] == expected

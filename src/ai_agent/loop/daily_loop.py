@@ -409,6 +409,7 @@ def run(
 
         t212_client = T212Client(
             api_key=settings.t212_api_key.get_secret_value(),
+            api_secret=settings.t212_api_secret.get_secret_value(),
             base_url=settings.t212_base_url,
         )
     sector_map = {e.symbol: e.sector for e in watchlist.entries if e.sector}

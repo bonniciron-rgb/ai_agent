@@ -1,6 +1,6 @@
 # Ethera Trading — Project Status & Roadmap
 
-**Last updated**: 2026-05-16 (Connections page + nav redesign)
+**Last updated**: 2026-05-16 (fix: T212 API now uses HTTP Basic auth)
 **Maintained by**: Claude (Lead, Opus for design/architecture)
 **Team**: Sonnet (implementation/distribution), Tiger teams (background development)
 **Daily Sync**: This file is the single source of truth for standups and context preservation.
@@ -192,6 +192,32 @@ So the *deliverable, honest* product is currently "**a low-beta equity sleeve**"
 | Test suite | `tests/signals/test_analyst_revisions.py` | ✅ | 28 tests across 8 classes (streak, plateau, stale, custom thresholds, empty data, formula, attributes) |
 
 **Third real signal through C1.** Based on Hawkins et al. analyst revision momentum anomaly. Finnhub `/stock/recommendation` integrated via `_inject_recommendations()`.
+
+---
+
+### Batch 24: Fix T212 Auth — HTTP Basic (key + secret) [2026-05-16]
+**PR #68**
+
+Root cause of the persistent `401`s when connecting Trading 212: the API was
+**updated** to use **HTTP Basic auth** — `Authorization: Basic base64(API_KEY:API_SECRET)`
+— but `t212_client.py` was built against the old single-raw-key scheme
+(`Authorization: <key>`). Confirmed against docs.trading212.com/api: the key is
+the username, the secret is the password. (Also confirmed the API supports
+**Invest + Stocks ISA** — an earlier claim that ISA was unsupported was wrong.)
+
+Changes:
+- `T212Client.__init__` takes `api_secret`; builds `Basic base64(key:secret)`,
+  `.strip()`-ing both halves (guards against env-var newline — a 401 cause).
+- `settings.py`: new `t212_api_secret`. Call sites (`reconciliation.py`,
+  `daily_loop.py`) and workflows (`daily.yml`, `reconcile.yml`) pass it.
+- Dashboard `/api/connection/t212`: builds the Basic header; needs both
+  `T212_API_KEY` + `T212_API_SECRET` in Vercel env.
+- `.env.example` documents both halves.
+
+**User action:** set `T212_API_SECRET` (the secret) alongside `T212_API_KEY`
+(the key id) in Vercel env *and* GitHub Actions secrets, then redeploy.
+
+617 tests passing; `tsc` clean.
 
 ---
 
