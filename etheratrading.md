@@ -196,7 +196,7 @@ So the *deliverable, honest* product is currently "**a low-beta equity sleeve**"
 ---
 
 ### Batch 22: Fix Zero-Proposal Bug — Regime Gate Loosened [2026-05-16]
-**PR #67**
+**PR #66 (bundled with the Vercel ops-doc commit)**
 
 The live agent had been proposing **nothing** every day ("No trade proposals
 today — no signals met the criteria"). Root cause: the system prompt's signal
