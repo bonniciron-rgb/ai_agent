@@ -280,7 +280,7 @@ function PositionsTable({ positions }: { positions: PortfolioPosition[] }) {
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-zinc-800 text-left text-xs uppercase tracking-wider text-zinc-500">
-            <th className="px-4 py-2.5 font-medium">Symbol</th>
+            <th className="px-4 py-2.5 font-medium">Holding</th>
             <th className="px-4 py-2.5 font-medium text-right">Qty</th>
             <th className="px-4 py-2.5 font-medium text-right">Avg</th>
             <th className="px-4 py-2.5 font-medium text-right">Price</th>
@@ -293,9 +293,23 @@ function PositionsTable({ positions }: { positions: PortfolioPosition[] }) {
             <tr key={p.ticker} className="bg-zinc-900">
               <td className="px-4 py-3">
                 <div className="flex items-center gap-2">
-                  <span className="font-mono font-bold text-zinc-100">
-                    {p.symbol}
-                  </span>
+                  {p.name && p.name !== p.symbol ? (
+                    <div className="min-w-0">
+                      <div
+                        className="max-w-[15rem] truncate text-zinc-100"
+                        title={p.name}
+                      >
+                        {p.name}
+                      </div>
+                      <div className="font-mono text-xs text-zinc-500">
+                        {p.symbol}
+                      </div>
+                    </div>
+                  ) : (
+                    <span className="font-mono font-bold text-zinc-100">
+                      {p.symbol}
+                    </span>
+                  )}
                   {p.inWatchlist ? (
                     <span className="text-xs rounded px-1.5 py-0.5 bg-emerald-900/50 text-emerald-400 border border-emerald-800">
                       watched

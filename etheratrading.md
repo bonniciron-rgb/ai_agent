@@ -195,8 +195,23 @@ So the *deliverable, honest* product is currently "**a low-beta equity sleeve**"
 
 ---
 
-### Batch 29: Portfolio — Value Insights (1d/7d Change, Count, Donut) [2026-05-17]
+### Batch 30: Portfolio — Friendly Instrument Names [2026-05-17]
 **PR (draft)**
+
+The positions table showed bare tickers (`VWRP`, `NVDA`). It now shows the
+human-readable instrument name:
+- **`route.ts`** — `getInstrumentNames()` fetches T212's
+  `/api/v0/equity/metadata/instruments` once, builds a raw-ticker → name map,
+  and caches it in module memory for 24h (the endpoint returns the whole
+  instrument universe). Each `PortfolioPosition` gains a `name` field
+  (falls back to the symbol if metadata is unavailable).
+- **`PortfolioClient.tsx`** — the table's first column ("Holding") shows the
+  name with the symbol as a mono sub-label.
+
+---
+
+### Batch 29: Portfolio — Value Insights (1d/7d Change, Count, Donut) [2026-05-17]
+**PR #73 (merged)**
 
 Richer Portfolio dashboard:
 - **`portfoliovaluesnapshot` table** — created + upserted by `/api/portfolio`

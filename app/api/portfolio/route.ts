@@ -20,6 +20,7 @@ export const runtime = "nodejs";
 export interface PortfolioPosition {
   ticker: string; // raw T212 ticker, e.g. "AAPL_US_EQ"
   symbol: string; // plain symbol, e.g. "AAPL"
+  name: string; // human-readable instrument name, e.g. "Apple Inc."
   quantity: number;
   averagePrice: number;
   currentPrice: number;
@@ -58,6 +59,45 @@ function plainSymbol(ticker: string): string {
   let seg = ticker.split("_")[0] || ticker;
   if (seg.length > 1 && seg.endsWith("l")) seg = seg.slice(0, -1);
   return seg.toUpperCase();
+}
+
+// Module-level cache of T212 instrument ticker -> human-readable name.
+// The metadata endpoint returns the whole instrument universe (large), so
+// it is fetched at most once per day per warm serverless instance.
+let instrumentCache: { at: number; names: Map<string, string> } | null = null;
+const INSTRUMENT_TTL_MS = 24 * 60 * 60 * 1000;
+
+async function getInstrumentNames(
+  base: string,
+  headers: Record<string, string>,
+): Promise<Map<string, string>> {
+  if (instrumentCache && Date.now() - instrumentCache.at < INSTRUMENT_TTL_MS) {
+    return instrumentCache.names;
+  }
+  const names = new Map<string, string>();
+  try {
+    const res = await fetch(`${base}/api/v0/equity/metadata/instruments`, {
+      headers,
+      cache: "no-store",
+    });
+    if (res.ok) {
+      const list = (await res.json()) as unknown;
+      if (Array.isArray(list)) {
+        for (const it of list as Record<string, unknown>[]) {
+          const t = typeof it.ticker === "string" ? it.ticker : "";
+          const n =
+            (typeof it.name === "string" && it.name.trim()) ||
+            (typeof it.shortName === "string" && it.shortName.trim()) ||
+            "";
+          if (t && n) names.set(t, n);
+        }
+      }
+      if (names.size > 0) instrumentCache = { at: Date.now(), names };
+    }
+  } catch {
+    // Metadata unavailable — positions fall back to the bare symbol.
+  }
+  return names;
 }
 
 function changeVs(
@@ -155,9 +195,10 @@ export async function GET() {
   const headers = { Authorization: `Basic ${token}`, Accept: "application/json" };
 
   try {
-    const [cashRes, posRes] = await Promise.all([
+    const [cashRes, posRes, instrumentNames] = await Promise.all([
       fetch(`${base}/api/v0/equity/account/cash`, { headers, cache: "no-store" }),
       fetch(`${base}/api/v0/equity/portfolio`, { headers, cache: "no-store" }),
+      getInstrumentNames(base, headers),
     ]);
 
     if (!cashRes.ok || !posRes.ok) {
@@ -196,6 +237,7 @@ export async function GET() {
     ).map((p: Record<string, unknown>) => {
       const ticker = String(p.ticker ?? "");
       const symbol = plainSymbol(ticker);
+      const name = instrumentNames.get(ticker) || symbol;
       const quantity = Number(p.quantity ?? 0);
       const averagePrice = Number(p.averagePrice ?? 0);
       const currentPrice = Number(p.currentPrice ?? 0);
@@ -206,6 +248,7 @@ export async function GET() {
       return {
         ticker,
         symbol,
+        name,
         quantity,
         averagePrice,
         currentPrice,
