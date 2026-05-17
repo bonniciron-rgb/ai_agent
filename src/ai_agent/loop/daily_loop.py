@@ -67,10 +67,10 @@ NEWS_DAYS_BACK = 7
 def _build_default_ohlcv_source():
     """Construct the default OHLCV source chain: yfinance → Stooq fallback."""
     from ai_agent.data.registry import OhlcvChain
-    from ai_agent.data.stooq_source import StooqSource
+    from ai_agent.data.yahoo_chart_source import YahooChartSource
     from ai_agent.data.yfinance_source import YFinanceSource
 
-    return OhlcvChain([YFinanceSource(), StooqSource()])
+    return OhlcvChain([YFinanceSource(), YahooChartSource()])
 
 
 def _build_finnhub_source(api_key: str):
