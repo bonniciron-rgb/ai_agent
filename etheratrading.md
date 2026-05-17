@@ -195,6 +195,25 @@ So the *deliverable, honest* product is currently "**a low-beta equity sleeve**"
 
 ---
 
+### Batch 37: Replace broken Stooq backup with Yahoo chart API [2026-05-17]
+**PR (draft)**
+
+Stooq's free CSV download is now gated behind an API key — it returns an
+"apikey" advert instead of data (the `source_failed` warnings). It was the
+backup OHLCV source, so there was effectively no working fallback.
+
+- **`data/yahoo_chart_source.py`** (new) — `YahooChartSource`, a keyless
+  adapter for Yahoo's stable `/v8/finance/chart` JSON endpoint. Resilient to
+  *yfinance-library* breakage (the most common failure mode) since it does
+  its own HTTP + parsing.
+- **`data/stooq_source.py`** + its test — deleted.
+- **`loop/daily_loop.py`** — OHLCV chain is now
+  `[YFinanceSource, YahooChartSource]`.
+- **`scripts/backfill_watchlist.py`**, **`scripts/check_signals.py`** — moved
+  off the deleted Stooq source onto `YahooChartSource`.
+
+---
+
 ### Batch 36: Loop currency normalisation to GBP [2026-05-17]
 **PR (draft)**
 
