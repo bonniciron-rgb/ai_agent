@@ -4,6 +4,9 @@
  * Returns the live Trading 212 portfolio — cash balances + open positions —
  * for the Portfolio dashboard page. Each position is flagged with whether its
  * symbol is already in the watchlist. Read-only; HTTP Basic auth.
+ *
+ * Also upserts a daily snapshot of total account value into
+ * `portfoliovaluesnapshot` so the UI can show 1-day / 7-day change.
  */
 
 import { cookies } from "next/headers";
@@ -27,12 +30,20 @@ export interface PortfolioPosition {
   usListed: boolean; // US-listed — the agent can fetch data and screen it
 }
 
+/** Change in total account value vs an earlier daily snapshot. */
+export interface ValueChange {
+  abs: number;
+  pct: number;
+  asOf: string; // the snapshot date this change is measured against
+}
+
 export interface PortfolioResult {
   ok: boolean;
   configured: boolean;
   env: string;
   cash?: { free: number; invested: number; total: number };
   positions: PortfolioPosition[];
+  valueChange?: { d1: ValueChange | null; d7: ValueChange | null };
   status?: number;
   message?: string;
   checkedAt: string;
@@ -47,6 +58,69 @@ function plainSymbol(ticker: string): string {
   let seg = ticker.split("_")[0] || ticker;
   if (seg.length > 1 && seg.endsWith("l")) seg = seg.slice(0, -1);
   return seg.toUpperCase();
+}
+
+function changeVs(
+  current: number,
+  past?: { as_of: string; total_value: number },
+): ValueChange | null {
+  if (!past || past.total_value <= 0) return null;
+  const abs = current - past.total_value;
+  return { abs, pct: (abs / past.total_value) * 100, asOf: past.as_of };
+}
+
+/**
+ * Upsert today's portfolio-value snapshot and return the 1-day / 7-day
+ * change vs earlier snapshots. Best-effort — a DB failure yields `undefined`
+ * and the comparison is simply omitted.
+ */
+async function recordSnapshot(
+  total: number,
+  free: number,
+  invested: number,
+  positionCount: number,
+): Promise<{ d1: ValueChange | null; d7: ValueChange | null } | undefined> {
+  try {
+    const sql = getSql();
+    await sql`
+      CREATE TABLE IF NOT EXISTS portfoliovaluesnapshot (
+        id SERIAL PRIMARY KEY,
+        as_of DATE NOT NULL UNIQUE,
+        total_value DOUBLE PRECISION NOT NULL,
+        free_cash DOUBLE PRECISION NOT NULL,
+        invested DOUBLE PRECISION NOT NULL,
+        position_count INTEGER NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+    await sql`
+      INSERT INTO portfoliovaluesnapshot
+        (as_of, total_value, free_cash, invested, position_count, created_at)
+      VALUES (CURRENT_DATE, ${total}, ${free}, ${invested}, ${positionCount}, NOW())
+      ON CONFLICT (as_of) DO UPDATE SET
+        total_value = EXCLUDED.total_value,
+        free_cash = EXCLUDED.free_cash,
+        invested = EXCLUDED.invested,
+        position_count = EXCLUDED.position_count,
+        created_at = NOW()
+    `;
+    const history = await sql<{ as_of: string; total_value: number }[]>`
+      SELECT as_of::text AS as_of, total_value
+      FROM portfoliovaluesnapshot
+      WHERE as_of < CURRENT_DATE
+      ORDER BY as_of DESC
+      LIMIT 30
+    `;
+    const cutoff = new Date();
+    cutoff.setUTCDate(cutoff.getUTCDate() - 7);
+    const cutoff7 = cutoff.toISOString().slice(0, 10);
+    return {
+      d1: changeVs(total, history[0]),
+      d7: changeVs(total, history.find((h) => h.as_of <= cutoff7)),
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 export async function GET() {
@@ -143,16 +217,23 @@ export async function GET() {
       };
     });
 
+    const free = Number(cash.free ?? 0);
+    const invested = Number(cash.invested ?? 0);
+    const total = Number(cash.total ?? 0);
+    const valueChange = await recordSnapshot(
+      total,
+      free,
+      invested,
+      positions.length,
+    );
+
     const result: PortfolioResult = {
       ok: true,
       configured: true,
       env,
-      cash: {
-        free: Number(cash.free ?? 0),
-        invested: Number(cash.invested ?? 0),
-        total: Number(cash.total ?? 0),
-      },
+      cash: { free, invested, total },
       positions,
+      valueChange,
       checkedAt,
     };
     return NextResponse.json(result);

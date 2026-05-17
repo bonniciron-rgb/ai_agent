@@ -4,7 +4,14 @@ import { useCallback, useEffect, useState } from "react";
 import type {
   PortfolioPosition,
   PortfolioResult,
+  ValueChange,
 } from "@/app/api/portfolio/route";
+
+// Distinct slice colours for the value-distribution donut.
+const PALETTE = [
+  "#6366f1", "#0ea5e9", "#10b981", "#f59e0b", "#ef4444",
+  "#a855f7", "#ec4899", "#14b8a6", "#84cc16", "#f97316",
+];
 
 function money(n: number): string {
   return n.toLocaleString("en-GB", {
@@ -151,30 +158,50 @@ export function PortfolioClient() {
           </span>
         </div>
         {data.cash && (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <div className="rounded-md border border-zinc-800 bg-zinc-900 p-4">
+          <div className="space-y-3">
+            {/* Total value headline + 1d/7d change */}
+            <div className="rounded-md border border-zinc-800 bg-zinc-900 p-5">
               <div className="text-xs uppercase tracking-wider text-zinc-500">
-                Free cash
+                Total value
               </div>
-              <div className="mt-1 text-lg font-semibold">
-                {money(data.cash.free)}
-              </div>
-            </div>
-            <div className="rounded-md border border-zinc-800 bg-zinc-900 p-4">
-              <div className="text-xs uppercase tracking-wider text-zinc-500">
-                Invested
-              </div>
-              <div className="mt-1 text-lg font-semibold">
-                {money(data.cash.invested)}
-              </div>
-            </div>
-            <div className="rounded-md border border-zinc-800 bg-zinc-900 p-4">
-              <div className="text-xs uppercase tracking-wider text-zinc-500">
-                Total
-              </div>
-              <div className="mt-1 text-lg font-semibold">
+              <div className="mt-1 text-3xl font-semibold">
                 {money(data.cash.total)}
               </div>
+              <div className="mt-2 flex flex-wrap items-center gap-4 text-sm">
+                {data.valueChange?.d1 || data.valueChange?.d7 ? (
+                  <>
+                    <DeltaPill label="1d" change={data.valueChange?.d1 ?? null} />
+                    <DeltaPill label="7d" change={data.valueChange?.d7 ?? null} />
+                  </>
+                ) : (
+                  <span className="text-xs text-zinc-600">
+                    Daily value tracking has started — 1d / 7d changes appear
+                    as history builds.
+                  </span>
+                )}
+              </div>
+            </div>
+            {/* Stat cards */}
+            <div className="grid grid-cols-3 gap-3">
+              <StatCard label="Free cash" value={money(data.cash.free)} />
+              <StatCard label="Invested" value={money(data.cash.invested)} />
+              <StatCard
+                label="Holdings"
+                value={`${positions.length} ticker${
+                  positions.length === 1 ? "" : "s"
+                }`}
+              />
+            </div>
+          </div>
+        )}
+        {/* Value distribution */}
+        {data.cash && positions.length > 0 && (
+          <div className="rounded-md border border-zinc-800 bg-zinc-900 p-4">
+            <div className="text-xs uppercase tracking-wider text-zinc-500">
+              Value distribution
+            </div>
+            <div className="mt-3">
+              <DonutChart positions={positions} freeCash={data.cash.free} />
             </div>
           </div>
         )}
@@ -306,6 +333,115 @@ function PositionsTable({ positions }: { positions: PortfolioPosition[] }) {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function StatCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-zinc-800 bg-zinc-900 p-4">
+      <div className="text-xs uppercase tracking-wider text-zinc-500">
+        {label}
+      </div>
+      <div className="mt-1 text-lg font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function DeltaPill({
+  label,
+  change,
+}: {
+  label: string;
+  change: ValueChange | null;
+}) {
+  if (!change) {
+    return <span className="text-zinc-600">{label} —</span>;
+  }
+  return (
+    <span className={pnlColor(change.abs)}>
+      <span className="text-zinc-500">{label}</span> {signed(change.abs)} (
+      {pct(change.pct)})
+    </span>
+  );
+}
+
+function DonutChart({
+  positions,
+  freeCash,
+}: {
+  positions: PortfolioPosition[];
+  freeCash: number;
+}) {
+  type Slice = { label: string; value: number; color: string };
+  const sorted = positions
+    .filter((p) => p.marketValue > 0)
+    .sort((a, b) => b.marketValue - a.marketValue);
+  const TOP = 8;
+  const slices: Slice[] = sorted.slice(0, TOP).map((p, i) => ({
+    label: p.symbol,
+    value: p.marketValue,
+    color: PALETTE[i % PALETTE.length],
+  }));
+  const rest = sorted.slice(TOP);
+  if (rest.length > 0) {
+    slices.push({
+      label: `Other (${rest.length})`,
+      value: rest.reduce((s, p) => s + p.marketValue, 0),
+      color: "#71717a",
+    });
+  }
+  if (freeCash > 0) {
+    slices.push({ label: "Cash", value: freeCash, color: "#3f3f46" });
+  }
+
+  const total = slices.reduce((s, x) => s + x.value, 0);
+  if (total <= 0) {
+    return <p className="text-sm text-zinc-500">No value to chart.</p>;
+  }
+
+  const R = 60;
+  const C = 2 * Math.PI * R;
+  let offset = 0;
+
+  return (
+    <div className="flex flex-wrap items-center gap-6">
+      <svg width="160" height="160" viewBox="0 0 160 160" className="shrink-0">
+        <g transform="rotate(-90 80 80)">
+          {slices.map((s) => {
+            const len = (s.value / total) * C;
+            const el = (
+              <circle
+                key={s.label}
+                cx="80"
+                cy="80"
+                r={R}
+                fill="none"
+                stroke={s.color}
+                strokeWidth="22"
+                strokeDasharray={`${len} ${C - len}`}
+                strokeDashoffset={-offset}
+              />
+            );
+            offset += len;
+            return el;
+          })}
+        </g>
+      </svg>
+      <ul className="space-y-1 text-sm">
+        {slices.map((s) => (
+          <li key={s.label} className="flex items-center gap-2">
+            <span
+              className="inline-block h-3 w-3 rounded-sm shrink-0"
+              style={{ backgroundColor: s.color }}
+            />
+            <span className="font-mono text-zinc-300">{s.label}</span>
+            <span className="text-zinc-500">
+              {money(s.value)} · {((s.value / total) * 100).toFixed(1)}%
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

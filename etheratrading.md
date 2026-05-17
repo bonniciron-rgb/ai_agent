@@ -195,8 +195,34 @@ So the *deliverable, honest* product is currently "**a low-beta equity sleeve**"
 
 ---
 
-### Batch 27: Portfolio — Restrict Watchlist Sync to US-Listed Holdings [2026-05-17]
+### Batch 29: Portfolio — Value Insights (1d/7d Change, Count, Donut) [2026-05-17]
 **PR (draft)**
+
+Richer Portfolio dashboard:
+- **`portfoliovaluesnapshot` table** — created + upserted by `/api/portfolio`
+  on every successful load (one row per day, keyed `as_of`). Stores total
+  value, free cash, invested, position count.
+- **1-day / 7-day change** — `route.ts` reads snapshot history and returns
+  `valueChange.d1` / `.d7` (vs the nearest earlier snapshot). Null until
+  history accumulates; the UI shows a "tracking has started" note meanwhile.
+- **`PortfolioClient.tsx`** — total-value headline with 1d/7d deltas, a
+  Holdings (ticker count) card, and a hand-rolled SVG **donut** showing the
+  value distribution across holdings + cash (top 8 + "Other").
+
+---
+
+### Batch 28: Default T212_ENV to live in Workflows [2026-05-17]
+**PR #72 (merged)**
+
+The daily loop kept hitting `demo.trading212.com` → `401` because the
+`T212_ENV` repo *variable* never took effect. `daily.yml`, `reconcile.yml`,
+`signals_check.yml` now default `T212_ENV` to `live` (the account is live;
+all three only read from T212). `vars.T212_ENV` still overrides if set.
+
+---
+
+### Batch 27: Portfolio — Restrict Watchlist Sync to US-Listed Holdings [2026-05-17]
+**PR #71 (merged)**
 
 First real daily-loop run after the Portfolio page surfaced a problem: the
 "Add holdings to watchlist" button had added the user's **London-listed ISA
