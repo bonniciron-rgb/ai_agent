@@ -1,6 +1,6 @@
 # Ethera Trading — Project Status & Roadmap
 
-**Last updated**: 2026-05-16 (Fix empty agent analysis — data-aware screening)
+**Last updated**: 2026-05-17 (Recorded new business requirements — proposal risk score, market-leaders tracker)
 **Maintained by**: Claude (Lead, Opus for design/architecture)
 **Team**: Sonnet (implementation/distribution), Tiger teams (background development)
 **Daily Sync**: This file is the single source of truth for standups and context preservation.
@@ -798,6 +798,37 @@ The breadth-based SPY tilt failed out-of-sample, so the dashboard/digest product
 |--------|--------|
 | External Telegram trading channels (e.g., JdubTrades) | Manual paste-and-analyze; video-only content not parseable. Future: build inbound webhook endpoint accepting structured payload (symbol, side, levels, source tag) |
 | Discord / private Slack signal rooms | Same as above — manual interim, webhook future |
+
+---
+
+## 📝 New Business Requirements — 2026-05-17
+
+Recorded from the product owner. Not yet scheduled or designed — captured here
+as the source of truth for upcoming work.
+
+### BR-1: Per-Proposal Risk Score
+Every trade proposal must carry a **risk score of 1–5** (1 = lowest risk,
+5 = highest risk) together with a short **reason** explaining that score.
+
+- Surface it wherever proposals appear: the `/proposals` list + detail page,
+  the mobile approval UI, and the daily digest (Telegram + web-push).
+- Derive the score from measurable inputs — e.g. volatility/ATR, position
+  size vs NAV, instrument liquidity, sector concentration, macro regime.
+  Exact rubric TBD.
+- Persist the score + reason on the `Proposal` record so decisions remain
+  auditable after the fact.
+
+### BR-2: Market Leaders & Emerging-Company Tracker
+A **separate section/page**, distinct from the watchlist flow, that tracks
+market leaders and new/emerging companies — including **IPOs**.
+
+- For each tracked opportunity, produce a proposal covering **what** to invest
+  in and **when** (entry timing — e.g. post-IPO volatility window, lock-up
+  expiry).
+- Track the **channels/sources** used to follow notable leaders (e.g. Elon
+  Musk, Warren Buffett) — X/Twitter accounts, Berkshire shareholder letters,
+  13F filings, etc. — so the agent can monitor them as signal inputs.
+- Scope, data sources, and ingestion mechanism TBD.
 
 ---
 
