@@ -48,6 +48,7 @@ from ai_agent.db.settings_store import is_trading_halted
 from ai_agent.loop.bar_store import bars_from_db, ingest_bars
 from ai_agent.loop.portfolio_snapshot import LivePortfolioSnapshot
 from ai_agent.risk.rails import RiskChecker
+from ai_agent.risk.scoring import score_proposal
 from ai_agent.settings import get_settings
 from ai_agent.watchlist import load_watchlist_from_db
 
@@ -214,10 +215,15 @@ def _build_prompt_text(result: AgentResult) -> str:
     return "\n\n".join(parts)
 
 
-def _save_proposals(proposals, agent_result: AgentResult | None = None) -> list[Proposal]:
+def _save_proposals(
+    proposals,
+    agent_result: AgentResult | None = None,
+    risk_scores: list | None = None,
+) -> list[Proposal]:
     """Persist TradeProposal objects to DB; return saved Proposal ORM rows.
 
     Also writes ProposalReasoning and ShadowPosition rows for every proposal.
+    *risk_scores* (if given) is a list of RiskScore aligned with *proposals*.
     """
     saved: list[Proposal] = []
     expires_at = datetime.now(UTC) + timedelta(hours=PROPOSAL_TTL_HOURS)
@@ -230,7 +236,8 @@ def _save_proposals(proposals, agent_result: AgentResult | None = None) -> list[
     output_tokens = getattr(agent_result, "output_tokens", 0) if agent_result else 0
 
     with get_session() as session:
-        for p in proposals:
+        for i, p in enumerate(proposals):
+            rs = risk_scores[i] if risk_scores is not None and i < len(risk_scores) else None
             row = Proposal(
                 expires_at=expires_at,
                 symbol=p.symbol,
@@ -240,6 +247,8 @@ def _save_proposals(proposals, agent_result: AgentResult | None = None) -> list[
                 stop_price=p.stop_price,
                 rationale=p.rationale,
                 confidence=p.confidence,
+                risk_score=rs.score if rs is not None else None,
+                risk_score_reason=rs.reason if rs is not None else None,
                 status=ProposalStatus.proposed,
             )
             session.add(row)
@@ -452,6 +461,7 @@ def run(
     usd_to_gbp = Decimal(1) / usd_per_gbp if usd_per_gbp else Decimal(1)
     checker = RiskChecker(portfolio=portfolio, usd_to_gbp=usd_to_gbp)
     passing: list = []
+    risk_scores: list = []  # parallel to `passing`
     for proposal in result.proposals:
         rail = checker.check(
             symbol=proposal.symbol,
@@ -462,6 +472,15 @@ def run(
         )
         if rail.allowed:
             passing.append(proposal)
+            risk_scores.append(
+                score_proposal(
+                    notional_gbp=proposal.limit_price * proposal.quantity * usd_to_gbp,
+                    nav=portfolio.nav,
+                    price=proposal.limit_price,
+                    atr=portfolio.atr(proposal.symbol),
+                    stop_price=proposal.stop_price,
+                )
+            )
             if checker.warnings:
                 logger.info("Risk warnings for %s: %s", proposal.symbol, checker.warnings)
         else:
@@ -478,7 +497,7 @@ def run(
             logger.info("  %s %s x%d @ %s", p.side, p.symbol, p.quantity, p.limit_price)
         # Still write reasoning + shadow rows even in dry-run so we can audit
         if passing:
-            _save_proposals(passing, agent_result=result)
+            _save_proposals(passing, agent_result=result, risk_scores=risk_scores)
             logger.info("[dry_run] Wrote reasoning + shadow rows for %d proposals", len(passing))
         return
 
@@ -496,7 +515,7 @@ def run(
         analysis.proposals_passed_risk,
     )
 
-    saved = _save_proposals(passing, agent_result=result)
+    saved = _save_proposals(passing, agent_result=result, risk_scores=risk_scores)
     logger.info("Saved %d proposals to DB", len(saved))
 
     no_proposal_text = _no_proposal_summary(analysis) if not saved else None

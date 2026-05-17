@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { Nav } from "@/app/components/Nav";
+import { RiskBadge } from "@/app/components/RiskBadge";
 import { StatusPill } from "@/app/components/StatusPill";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth";
 import { buildSparkline, computeIndicators } from "@/lib/indicators";
@@ -119,6 +120,22 @@ export default async function ProposalDetailPage({
               <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-zinc-200">
                 {proposal.rationale || "(no rationale recorded)"}
               </p>
+            </div>
+
+            <div className="mt-6 rounded-lg border border-zinc-800 bg-zinc-900/30 p-5">
+              <h2 className="text-sm font-medium uppercase tracking-wider text-zinc-500">
+                Risk score
+              </h2>
+              <div className="mt-3 flex items-center gap-3">
+                <RiskBadge
+                  score={proposal.risk_score}
+                  reason={proposal.risk_score_reason}
+                />
+                <p className="text-sm text-zinc-300">
+                  {proposal.risk_score_reason ??
+                    "Not scored (proposal predates risk scoring)."}
+                </p>
+              </div>
             </div>
 
             {reasoning ? (

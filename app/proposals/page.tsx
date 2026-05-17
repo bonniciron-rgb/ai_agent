@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { Nav } from "@/app/components/Nav";
+import { RiskBadge } from "@/app/components/RiskBadge";
 import { StatusPill } from "@/app/components/StatusPill";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth";
 import {
@@ -133,6 +134,8 @@ export default async function ProposalsPage({
                   stopPrice={p.stop_price ? String(p.stop_price) : null}
                   rationale={p.rationale}
                   confidence={p.confidence}
+                  riskScore={p.risk_score}
+                  riskScoreReason={p.risk_score_reason}
                   status={p.status}
                   createdAt={String(p.created_at)}
                 />
@@ -150,6 +153,7 @@ export default async function ProposalsPage({
                     <th className="px-4 py-2 text-right">Qty</th>
                     <th className="px-4 py-2 text-right">Limit</th>
                     <th className="px-4 py-2 text-right">Stop</th>
+                    <th className="px-4 py-2 text-left">Risk</th>
                     <th className="px-4 py-2 text-left">Status</th>
                     <th className="px-4 py-2 text-left">Decided by</th>
                     <th className="px-4 py-2 text-left"></th>
@@ -171,6 +175,12 @@ export default async function ProposalsPage({
                       </td>
                       <td className="px-4 py-2 text-right font-mono text-zinc-500">
                         {p.stop_price ?? "—"}
+                      </td>
+                      <td className="px-4 py-2">
+                        <RiskBadge
+                          score={p.risk_score}
+                          reason={p.risk_score_reason}
+                        />
                       </td>
                       <td className="px-4 py-2">
                         <StatusPill status={p.status} />

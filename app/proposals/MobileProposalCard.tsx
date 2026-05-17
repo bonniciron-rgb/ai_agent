@@ -1,5 +1,6 @@
 "use client";
 
+import { RiskBadge } from "@/app/components/RiskBadge";
 import { StatusPill } from "@/app/components/StatusPill";
 
 interface Props {
@@ -11,6 +12,8 @@ interface Props {
   stopPrice: string | null;
   rationale: string;
   confidence: string;
+  riskScore: number | null;
+  riskScoreReason: string | null;
   status: string;
   createdAt: string;
 }
@@ -42,6 +45,7 @@ export function MobileProposalCard(props: Props) {
         <span className="rounded bg-zinc-800 px-1.5 py-0.5 font-medium text-zinc-300">
           {props.confidence}
         </span>
+        <RiskBadge score={props.riskScore} reason={props.riskScoreReason} />
         <span>
           Limit{" "}
           <span className="font-mono text-zinc-300">${props.limitPrice}</span>
