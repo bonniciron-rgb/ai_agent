@@ -24,6 +24,7 @@ export interface PortfolioPosition {
   pnl: number;
   pnlPct: number;
   inWatchlist: boolean;
+  usListed: boolean; // US-listed — the agent can fetch data and screen it
 }
 
 export interface PortfolioResult {
@@ -37,9 +38,15 @@ export interface PortfolioResult {
   checkedAt: string;
 }
 
-/** Strip the T212 venue suffix: "AAPL_US_EQ" -> "AAPL". */
+/**
+ * Strip the T212 venue suffix and normalise to a plain symbol.
+ *   "AAPL_US_EQ" -> "AAPL"
+ *   "VWRPl_EQ"   -> "VWRP"  (T212 marks London listings with a trailing "l")
+ */
 function plainSymbol(ticker: string): string {
-  return (ticker.split("_")[0] || ticker).toUpperCase();
+  let seg = ticker.split("_")[0] || ticker;
+  if (seg.length > 1 && seg.endsWith("l")) seg = seg.slice(0, -1);
+  return seg.toUpperCase();
 }
 
 export async function GET() {
@@ -132,6 +139,7 @@ export async function GET() {
         pnl,
         pnlPct,
         inWatchlist: watchSymbols.has(symbol),
+        usListed: ticker.includes("_US_"),
       };
     });
 

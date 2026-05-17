@@ -195,8 +195,30 @@ So the *deliverable, honest* product is currently "**a low-beta equity sleeve**"
 
 ---
 
-### Batch 26: Portfolio Page — Live T212 Holdings + Watchlist Sync [2026-05-16]
+### Batch 27: Portfolio — Restrict Watchlist Sync to US-Listed Holdings [2026-05-17]
 **PR (draft)**
+
+First real daily-loop run after the Portfolio page surfaced a problem: the
+"Add holdings to watchlist" button had added the user's **London-listed ISA
+ETFs** (VWRP, VHYD, AIQG, JAY …). The agent's data pipeline (yfinance/Stooq)
+and factor signals are built for **US single stocks** — so bar ingestion failed
+for every London ticker (`possibly delisted; no timezone found`).
+
+Fix — keep the screening watchlist US-only:
+- **`route.ts`** — each `PortfolioPosition` now carries `usListed`
+  (`ticker.includes("_US_")`). `plainSymbol()` also strips T212's trailing
+  lowercase `l` London marker (`VWRPl_EQ` → `VWRP`, not `VWRPL`).
+- **`PortfolioClient.tsx`** — "Add holdings to watchlist" only POSTs US-listed
+  holdings; non-US positions show a muted `not screened` badge and a note.
+
+Also surfaced (config, user-side): the daily-loop GitHub Actions run hit
+`demo.trading212.com` and 401'd because the `T212_ENV` **repository variable**
+is unset → defaults to `demo`. Must be set to `live`.
+
+---
+
+### Batch 26: Portfolio Page — Live T212 Holdings + Watchlist Sync [2026-05-16]
+**PR #70 (merged)**
 
 New **Portfolio** page surfacing the live Trading 212 account so held symbols
 can flow into the agent's watchlist:

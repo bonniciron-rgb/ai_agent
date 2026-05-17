@@ -57,16 +57,20 @@ export function PortfolioClient() {
   }, [load]);
 
   const positions = data?.positions ?? [];
-  const untracked = positions.filter((p) => !p.inWatchlist);
+  // Only US-listed holdings can be screened — the agent's data pipeline
+  // (yfinance/Stooq) and factor signals are built for US equities. London
+  // ETFs etc. are shown but never pushed onto the screening watchlist.
+  const addable = positions.filter((p) => !p.inWatchlist && p.usListed);
+  const nonUs = positions.filter((p) => !p.usListed);
 
   async function addHoldings() {
-    if (untracked.length === 0) return;
+    if (addable.length === 0) return;
     setAdding(true);
     setAddMsg(null);
     let added = 0;
     let skipped = 0;
     let failed = 0;
-    for (const p of untracked) {
+    for (const p of addable) {
       try {
         const res = await fetch("/api/watchlist", {
           method: "POST",
@@ -193,11 +197,11 @@ export function PortfolioClient() {
           </div>
         ) : (
           <>
-            {untracked.length > 0 && (
+            {addable.length > 0 && (
               <div className="flex flex-wrap items-center gap-3 rounded-md border border-zinc-800 bg-zinc-900 px-4 py-3">
                 <span className="text-sm text-zinc-400">
-                  {untracked.length} held symbol
-                  {untracked.length === 1 ? " is" : "s are"} not on the
+                  {addable.length} US-listed holding
+                  {addable.length === 1 ? " is" : "s are"} not on the
                   watchlist.
                 </span>
                 <button
@@ -210,10 +214,17 @@ export function PortfolioClient() {
                 {addMsg && <span className="text-xs text-zinc-500">{addMsg}</span>}
               </div>
             )}
-            {untracked.length === 0 && addMsg && (
+            {addable.length === 0 && addMsg && (
               <div className="rounded-md border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm text-emerald-400">
-                {addMsg} — every holding is on the watchlist.
+                {addMsg} — every screenable holding is on the watchlist.
               </div>
+            )}
+            {nonUs.length > 0 && (
+              <p className="text-xs text-zinc-600">
+                {nonUs.length} non-US holding{nonUs.length === 1 ? "" : "s"}{" "}
+                (e.g. London-listed ETFs) shown but not screened — the agent
+                only analyses US equities.
+              </p>
             )}
             <PositionsTable positions={positions} />
           </>
@@ -262,9 +273,13 @@ function PositionsTable({ positions }: { positions: PortfolioPosition[] }) {
                     <span className="text-xs rounded px-1.5 py-0.5 bg-emerald-900/50 text-emerald-400 border border-emerald-800">
                       watched
                     </span>
-                  ) : (
+                  ) : p.usListed ? (
                     <span className="text-xs rounded px-1.5 py-0.5 bg-zinc-800 text-zinc-500 border border-zinc-700">
                       untracked
+                    </span>
+                  ) : (
+                    <span className="text-xs rounded px-1.5 py-0.5 bg-zinc-900 text-zinc-600 border border-zinc-800">
+                      not screened
                     </span>
                   )}
                 </div>
