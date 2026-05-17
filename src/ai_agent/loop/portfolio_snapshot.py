@@ -16,6 +16,7 @@ from decimal import Decimal
 
 from sqlmodel import select
 
+from ai_agent.broker.fx import get_gbp_rates, to_gbp
 from ai_agent.db.engine import get_session
 from ai_agent.db.models import Bar, Order, OrderSide, OrderStatus, Position
 
@@ -133,9 +134,20 @@ class LivePortfolioSnapshot:
 
         try:
             positions = client.get_positions()
+            # Position prices are quoted in the instrument's own currency
+            # (USD, GBX pence, …); convert to the GBP account currency so the
+            # values are comparable with NAV in the risk rails.
+            currencies: dict[str, str] = {}
+            try:
+                currencies = client.get_instruments()
+            except Exception:
+                logger.warning(
+                    "T212 instrument metadata unavailable — position values not currency-normalised"
+                )
+            fx_rates = get_gbp_rates() if currencies else {}
             for pos in positions:
-                val = pos.current_price * pos.quantity
-                position_values[pos.ticker.upper()] = val
+                price = to_gbp(pos.current_price, currencies.get(pos.ticker, ""), fx_rates)
+                position_values[pos.ticker.upper()] = price * pos.quantity
         except Exception:
             logger.exception("Failed to fetch T212 positions")
 

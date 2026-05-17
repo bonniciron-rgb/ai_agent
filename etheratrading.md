@@ -195,6 +195,30 @@ So the *deliverable, honest* product is currently "**a low-beta equity sleeve**"
 
 ---
 
+### Batch 36: Loop currency normalisation to GBP [2026-05-17]
+**PR (draft)**
+
+The loop mixed currencies: NAV is GBP, but position prices are quoted in the
+instrument's currency (USD, GBX pence) and proposal limit prices are USD —
+so the risk caps compared USD/GBX notionals against a GBP NAV.
+
+- **`broker/fx.py`** (new) — `get_gbp_rates()` (frankfurter.app, no key,
+  process-cached) + `to_gbp()`: GBP unchanged, GBX/GBp ÷100, others ÷rate.
+- **`broker/t212_client.py`** — `get_instruments()` → `{ticker: currencyCode}`.
+- **`loop/portfolio_snapshot.py`** — position values converted to GBP via
+  instrument currency + FX before populating `position_values`.
+- **`risk/rails.py`** — `RiskChecker` gains `usd_to_gbp`; order notionals are
+  converted to GBP (proposals are US-listed → USD). Default 1 = no-op.
+- **`loop/daily_loop.py`** — wires the live USD→GBP rate into the checker.
+- **`tests/conftest.py`** — autouse fixture seeds the FX cache so no test
+  reaches the live rate service.
+
+Residual: the agent still *sizes* its proposals currency-naively (treats the
+GBP NAV as USD); the corrected rails accept the result (slightly under 5%).
+Making the agent FX-aware for exact sizing is a separate follow-up.
+
+---
+
 ### Batch 35: Fix — positions load (fxPpl null) + NAV double-count [2026-05-17]
 **PR (draft)**
 

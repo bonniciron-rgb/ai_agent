@@ -101,6 +101,24 @@ class T212Client:
         data = self._get("/api/v0/equity/portfolio")
         return [OpenPosition.model_validate(p) for p in data]
 
+    def get_instruments(self) -> dict[str, str]:
+        """Return ``{ticker: currencyCode}`` for the T212 instrument universe.
+
+        Used to convert position prices (quoted in the instrument's own
+        currency — USD, GBX, …) into the GBP account currency.
+        """
+        data = self._get("/api/v0/equity/metadata/instruments")
+        out: dict[str, str] = {}
+        if isinstance(data, list):
+            for it in data:
+                if not isinstance(it, dict):
+                    continue
+                ticker = it.get("ticker")
+                currency = it.get("currencyCode")
+                if isinstance(ticker, str) and isinstance(currency, str):
+                    out[ticker] = currency
+        return out
+
     # ------------------------------------------------------------------
     # Orders
     # ------------------------------------------------------------------
