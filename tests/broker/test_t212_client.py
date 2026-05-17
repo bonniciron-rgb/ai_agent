@@ -119,6 +119,19 @@ def test_get_positions_empty_list() -> None:
     assert client.get_positions() == []
 
 
+def test_get_instruments_returns_currency_map() -> None:
+    payload = [
+        {"ticker": "AAPL_US_EQ", "currencyCode": "USD", "name": "Apple Inc."},
+        {"ticker": "VWRPl_EQ", "currencyCode": "GBX", "name": "Vanguard All-World"},
+        {"ticker": "BAD_EQ"},  # missing currencyCode — skipped
+    ]
+    client = T212Client(
+        api_key="test",
+        http_client=_mock_client({"/api/v0/equity/metadata/instruments": (200, payload)}),
+    )
+    assert client.get_instruments() == {"AAPL_US_EQ": "USD", "VWRPl_EQ": "GBX"}
+
+
 def test_get_positions_handles_null_fx_ppl() -> None:
     """T212 sends fxPpl=null for account-currency instruments (e.g. London ETFs)."""
     payload = [{**POSITIONS_PAYLOAD[0], "fxPpl": None, "ppl": None}]

@@ -34,6 +34,7 @@ from sqlmodel import select
 
 from ai_agent.agent.runner import AgentResult, run_agent
 from ai_agent.agent.tools import Toolbox
+from ai_agent.broker.fx import get_gbp_rates
 from ai_agent.db.engine import get_session, init_schema
 from ai_agent.db.models import (
     DailyAnalysis,
@@ -444,8 +445,12 @@ def run(
         result.iterations,
     )
 
-    # 7. Risk filter
-    checker = RiskChecker(portfolio=portfolio)
+    # 7. Risk filter — proposal limit prices are USD (US-listed watchlist);
+    # convert notionals to GBP so they compare against the GBP NAV.
+    fx_rates = get_gbp_rates()
+    usd_per_gbp = fx_rates.get("USD")
+    usd_to_gbp = Decimal(1) / usd_per_gbp if usd_per_gbp else Decimal(1)
+    checker = RiskChecker(portfolio=portfolio, usd_to_gbp=usd_to_gbp)
     passing: list = []
     for proposal in result.proposals:
         rail = checker.check(

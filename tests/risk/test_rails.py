@@ -269,6 +269,28 @@ def test_risk_checker_valid_stop_passes() -> None:
     assert result.allowed
 
 
+def test_risk_checker_converts_usd_notional_to_gbp() -> None:
+    # 100 shares @ $100 = $10,000 — over the 5% (5,000) cap of a 100k GBP NAV
+    # at face value, but 0.4 * 10,000 = 4,000 GBP once converted, so it passes.
+    raw = RiskChecker(portfolio=make_portfolio())
+    assert not raw.check(
+        symbol="AAPL",
+        side="buy",
+        quantity=100,
+        limit_price=Decimal("100"),
+        stop_price=Decimal("96"),
+    ).allowed
+
+    converted = RiskChecker(portfolio=make_portfolio(), usd_to_gbp=Decimal("0.4"))
+    assert converted.check(
+        symbol="AAPL",
+        side="buy",
+        quantity=100,
+        limit_price=Decimal("100"),
+        stop_price=Decimal("96"),
+    ).allowed
+
+
 def test_risk_checker_kill_switch_blocks_all() -> None:
     checker = RiskChecker(portfolio=make_portfolio(), halt=True)
     result = checker.check(

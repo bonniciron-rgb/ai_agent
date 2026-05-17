@@ -203,12 +203,17 @@ class RiskChecker:
         Live or test PortfolioSnapshot.
     halt:
         When True, every proposal is rejected immediately (kill-switch state).
+    usd_to_gbp:
+        Multiplier converting a USD price to GBP. Proposals are US-listed, so
+        limit prices are in USD while NAV is in GBP; default 1 (no conversion)
+        keeps same-currency callers and tests unaffected.
     warnings:
         Accumulated non-blocking advisory messages from the last check.
     """
 
     portfolio: PortfolioSnapshot
     halt: bool = False
+    usd_to_gbp: Decimal = Decimal(1)
     warnings: list[str] = field(default_factory=list)
 
     def check(
@@ -227,7 +232,8 @@ class RiskChecker:
             return _fail("Kill switch: trading is halted")
 
         # Only BUY proposals go through all rails; SELL proposals skip position/sector caps
-        order_notional = limit_price * quantity
+        # limit_price is in the instrument currency (USD); NAV is GBP.
+        order_notional = limit_price * quantity * self.usd_to_gbp
 
         if side.lower() == "buy":
             for result in (
