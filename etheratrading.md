@@ -195,6 +195,24 @@ So the *deliverable, honest* product is currently "**a low-beta equity sleeve**"
 
 ---
 
+### Batch 42: BR-2 — Insider (Form 4) activity tracker [2026-05-17]
+**PR (draft)**
+
+The free alternative to the deferred X/Twitter leader feed: track corporate
+insiders buying/selling their own stock via SEC Form 4 filings.
+
+- **`lib/insiders.ts`** (new) — fetches Finnhub's insider-transactions
+  endpoint (Form 4 data) for the active watchlist, last 90 days; keeps
+  open-market buys/sells (codes P/S), cached 6h. Degrades gracefully if
+  `FINNHUB_API_KEY` is unset.
+- **`app/insiders/page.tsx`** (new) — table of date, symbol, insider,
+  buy/sell, shares, value.
+- **`Nav.tsx`** — "Insiders" link under Markets.
+
+Completes BR-2's "follow the leaders" theme without the paid X API.
+
+---
+
 ### Batch 41: BR-2 — IPO calendar tracker [2026-05-17]
 **PR (draft)**
 
