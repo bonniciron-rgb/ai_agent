@@ -28,6 +28,7 @@ const GROUPS: { label: string; links: NavLink[] }[] = [
     label: "Markets",
     links: [
       { href: "/regime", label: "Regime" },
+      { href: "/leaders", label: "Leaders" },
       { href: "/signals", label: "Signals" },
       { href: "/watchlist", label: "Watchlist" },
     ],
@@ -136,12 +137,28 @@ export function Nav({ session }: NavProps) {
             aria-expanded={menuOpen}
           >
             {menuOpen ? (
-              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 20 20"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              >
                 <line x1="4" y1="4" x2="16" y2="16" />
                 <line x1="16" y1="4" x2="4" y2="16" />
               </svg>
             ) : (
-              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 20 20"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              >
                 <line x1="3" y1="6" x2="17" y2="6" />
                 <line x1="3" y1="10" x2="17" y2="10" />
                 <line x1="3" y1="14" x2="17" y2="14" />
@@ -167,7 +184,10 @@ export function Nav({ session }: NavProps) {
             ))}
           </div>
           {GROUPS.map((group) => (
-            <div key={group.label} className="mt-3 border-t border-zinc-800 pt-2">
+            <div
+              key={group.label}
+              className="mt-3 border-t border-zinc-800 pt-2"
+            >
               <div className="px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-zinc-600">
                 {group.label}
               </div>
@@ -186,8 +206,15 @@ export function Nav({ session }: NavProps) {
             </div>
           ))}
           <div className="mt-3 border-t border-zinc-800 pt-3 text-sm text-zinc-500">
-            <span>{session.username ? `@${session.username}` : `user ${session.uid}`}</span>
-            <a href="/api/auth/logout" className="ml-3 text-zinc-600 hover:text-zinc-300">
+            <span>
+              {session.username
+                ? `@${session.username}`
+                : `user ${session.uid}`}
+            </span>
+            <a
+              href="/api/auth/logout"
+              className="ml-3 text-zinc-600 hover:text-zinc-300"
+            >
               Sign out
             </a>
           </div>
