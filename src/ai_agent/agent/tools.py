@@ -13,8 +13,10 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-# Default no-op for get_external_signals so Toolbox stays backward-compatible.
+# Default no-ops so Toolbox stays backward-compatible for callers that don't
+# wire every optional tool (e.g. backtest replay).
 _noop_signals: Callable[[dict], Any] = lambda _: []  # noqa: E731
+_noop_holdings: Callable[[dict], Any] = lambda _: {"institutional_holdings": []}  # noqa: E731
 
 TOOL_SCHEMAS: list[dict] = [
     {
@@ -89,6 +91,24 @@ TOOL_SCHEMAS: list[dict] = [
         },
     },
     {
+        "name": "get_institutional_holdings",
+        "description": (
+            "Return the latest disclosed equity holdings of widely-followed "
+            "institutional investors (Berkshire Hathaway/Buffett, Scion/Burry, "
+            "Pershing Square/Ackman) from their quarterly SEC 13F filings. "
+            "Each manager's top holdings are listed with the percent of their "
+            "portfolio. Treat this as 'smart money' conviction context — a "
+            "stock being a large holding of a respected investor is supportive, "
+            "but 13F data is up to 45 days stale, so never use it as a timing "
+            "signal. Takes no arguments."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    {
         "name": "propose_trade",
         "description": (
             "Record a trade proposal. Only call this when you have a clear signal "
@@ -141,6 +161,7 @@ class Toolbox:
     get_portfolio: Callable[[dict], Any]
     propose_trade: Callable[[dict], Any]
     get_external_signals: Callable[[dict], Any] = field(default=_noop_signals)
+    get_institutional_holdings: Callable[[dict], Any] = field(default=_noop_holdings)
     _proposals: list = field(default_factory=list)
 
     def dispatch(self, name: str, inputs: dict) -> Any:
@@ -149,6 +170,7 @@ class Toolbox:
             "get_news": self.get_news,
             "get_portfolio": self.get_portfolio,
             "get_external_signals": self.get_external_signals,
+            "get_institutional_holdings": self.get_institutional_holdings,
             "propose_trade": self._record_and_call(self.propose_trade),
         }.get(name)
         if fn is None:

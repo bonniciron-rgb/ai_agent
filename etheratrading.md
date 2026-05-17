@@ -195,6 +195,26 @@ So the *deliverable, honest* product is currently "**a low-beta equity sleeve**"
 
 ---
 
+### Batch 40: BR-2 — Agent can read institutional 13F holdings [2026-05-17]
+**PR (draft)**
+
+Wires the 13F "smart money" data into the trading agent so it can weigh what
+notable investors hold when forming proposals.
+
+- **`data/thirteenf.py`** (new) — Python 13F fetcher (mirrors
+  `lib/thirteenf.ts`): pulls a manager's latest 13F-HR from SEC EDGAR, parses
+  the information-table XML with `xml.etree`, merges lots by issuer, ranks by
+  portfolio %. Process-cached (13F data is quarterly).
+- **`agent/tools.py`** — new `get_institutional_holdings` tool: returns each
+  tracked manager's top holdings with portfolio %. Backward-compatible
+  (no-op default on `Toolbox`).
+- **`loop/daily_loop.py`** — wires the tool into the agent's Toolbox.
+
+The tool description tells the agent to treat 13F as supportive conviction
+context, not a timing signal (data is up to 45 days stale).
+
+---
+
 ### Batch 39: BR-2 (start) — Institutional 13F "smart money" tracker [2026-05-17]
 **PR (draft)**
 

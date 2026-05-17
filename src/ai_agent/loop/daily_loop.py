@@ -165,12 +165,33 @@ def _build_toolbox(
             logger.warning("get_external_signals failed for %s: %s", symbol, exc)
             return []
 
+    def get_institutional_holdings(inputs: dict) -> dict:
+        from ai_agent.data.thirteenf import MANAGERS, latest_13f
+
+        out: list[dict] = []
+        for manager in MANAGERS:
+            report = latest_13f(manager)
+            if report.error is not None:
+                continue
+            out.append(
+                {
+                    "manager": report.manager,
+                    "as_of": report.period_of_report,
+                    "top_holdings": [
+                        {"issuer": h.issuer, "portfolio_pct": round(h.pct * 100, 1)}
+                        for h in report.holdings[:10]
+                    ],
+                }
+            )
+        return {"institutional_holdings": out}
+
     return Toolbox(
         get_features=get_features,
         get_news=get_news,
         get_portfolio=get_portfolio,
         propose_trade=propose_trade,
         get_external_signals=get_external_signals,
+        get_institutional_holdings=get_institutional_holdings,
     )
 
 
