@@ -49,6 +49,7 @@ class ProposalSummary:
     confidence: str
     status: str
     rationale: str  # truncated to 200 chars
+    risk_score: int | None = None  # 1 (lowest) .. 5 (highest risk)
 
 
 @dataclass
@@ -126,6 +127,7 @@ def aggregate_digest(
             confidence=p.confidence,
             status=str(p.status),
             rationale=p.rationale[:200],
+            risk_score=getattr(p, "risk_score", None),
         )
         for p in proposals[:5]
     ]
@@ -191,9 +193,10 @@ def format_digest_html(digest: DigestData) -> str:
     else:
         for s in digest.proposal_summaries:
             price = f"${s.limit_price:,.2f}"
+            risk = f" risk {s.risk_score}/5" if s.risk_score is not None else ""
             lines.append(
                 f"• {s.side.upper()} {s.symbol} {s.quantity} @ {price}"
-                f" ({s.confidence}) — {s.status}"
+                f" ({s.confidence}{risk}) — {s.status}"
             )
 
     lines.append("")

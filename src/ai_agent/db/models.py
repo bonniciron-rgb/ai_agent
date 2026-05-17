@@ -68,6 +68,8 @@ class Proposal(SQLModel, table=True):
     stop_price: Decimal | None = None
     rationale: str
     confidence: str = Field(max_length=16)
+    risk_score: int | None = Field(default=None)  # 1 (lowest) .. 5 (highest risk)
+    risk_score_reason: str | None = Field(default=None, max_length=200)
     status: ProposalStatus = Field(default=ProposalStatus.proposed, index=True)
     decided_at: datetime | None = None
     decided_by: str | None = Field(default=None, max_length=64)

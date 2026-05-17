@@ -195,6 +195,26 @@ So the *deliverable, honest* product is currently "**a low-beta equity sleeve**"
 
 ---
 
+### Batch 38: BR-1 — Per-proposal risk score [2026-05-17]
+**PR (draft)**
+
+Implements business requirement BR-1: every proposal carries a 1-5 risk
+score (1 = lowest risk) with a short reason.
+
+- **`risk/scoring.py`** (new) — `score_proposal()`: rule-based 1-5 score from
+  three measurable factors (position size vs NAV, ATR volatility, stop-loss
+  width). Transparent, unit-tested, no LLM cost.
+- **`db/models.py`** — `Proposal` gains `risk_score` + `risk_score_reason`
+  (nullable; the Batch 33 schema reconciler adds the columns next loop run).
+- **`loop/daily_loop.py`** — scores each passing proposal, persists it.
+- **`digest/daily_digest.py`** — digest line shows `risk N/5`.
+- **`lib/queries.ts`** + new **`RiskBadge`** component — score surfaced on
+  the `/proposals` list, the proposal detail page, and the mobile card.
+
+Macro regime was considered as a 4th factor but left out for now.
+
+---
+
 ### Batch 37: Replace broken Stooq backup with Yahoo chart API [2026-05-17]
 **PR (draft)**
 
@@ -913,7 +933,7 @@ The breadth-based SPY tilt failed out-of-sample, so the dashboard/digest product
 Recorded from the product owner. Not yet scheduled or designed — captured here
 as the source of truth for upcoming work.
 
-### BR-1: Per-Proposal Risk Score
+### BR-1: Per-Proposal Risk Score  ✅ Shipped (Batch 38)
 Every trade proposal must carry a **risk score of 1–5** (1 = lowest risk,
 5 = highest risk) together with a short **reason** explaining that score.
 

@@ -40,6 +40,8 @@ export interface Proposal {
   stop_price: string | null;
   rationale: string;
   confidence: string;
+  risk_score: number | null; // 1 (lowest) .. 5 (highest risk)
+  risk_score_reason: string | null;
   status: ProposalStatus;
   decided_at: Date | null;
   decided_by: string | null;
@@ -115,7 +117,7 @@ export async function listRecentProposals(limit = 50): Promise<Proposal[]> {
     SELECT
       id, created_at, expires_at, symbol, side, quantity::text AS quantity,
       limit_price::text AS limit_price, stop_price::text AS stop_price,
-      rationale, confidence, status, decided_at, decided_by
+      rationale, confidence, risk_score, risk_score_reason, status, decided_at, decided_by
     FROM proposal
     ORDER BY created_at DESC
     LIMIT ${limit}
@@ -128,7 +130,7 @@ export async function getProposal(id: number): Promise<Proposal | null> {
     SELECT
       id, created_at, expires_at, symbol, side, quantity::text AS quantity,
       limit_price::text AS limit_price, stop_price::text AS stop_price,
-      rationale, confidence, status, decided_at, decided_by
+      rationale, confidence, risk_score, risk_score_reason, status, decided_at, decided_by
     FROM proposal
     WHERE id = ${id}
     LIMIT 1
@@ -193,7 +195,7 @@ export async function listProposalsFiltered(
     SELECT
       id, created_at, expires_at, symbol, side, quantity::text AS quantity,
       limit_price::text AS limit_price, stop_price::text AS stop_price,
-      rationale, confidence, status, decided_at, decided_by
+      rationale, confidence, risk_score, risk_score_reason, status, decided_at, decided_by
     FROM proposal
     WHERE (${status}::text IS NULL OR status = ${status})
       AND (${symbol}::text IS NULL OR symbol = ${symbol})
