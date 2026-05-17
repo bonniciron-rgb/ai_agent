@@ -118,12 +118,15 @@ class LivePortfolioSnapshot:
 
     def _load_from_t212(self, client) -> tuple[Decimal, dict[str, Decimal], dict[str, str]]:
         """Load cash + positions from T212; return (nav, position_values, db_sectors)."""
+        nav = Decimal("0")
         try:
             cash_info = client.get_cash()
-            cash = cash_info.free + cash_info.invested
+            # `total` is the account NAV — free cash plus the market value of
+            # every open position. Adding position values on top of it would
+            # double-count the invested portion.
+            nav = cash_info.total
         except Exception:
             logger.exception("Failed to fetch T212 cash")
-            cash = Decimal("0")
 
         position_values: dict[str, Decimal] = {}
         db_sectors: dict[str, str] = {}
@@ -143,7 +146,6 @@ class LivePortfolioSnapshot:
                 if p.sector:
                     db_sectors[p.symbol.upper()] = p.sector
 
-        nav = cash + sum(position_values.values(), Decimal("0"))
         return nav, position_values, db_sectors
 
 

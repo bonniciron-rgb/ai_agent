@@ -24,6 +24,7 @@ from ai_agent.loop.portfolio_snapshot import (
 class FakeCash:
     free = Decimal("5_000")
     invested = Decimal("20_000")
+    total = Decimal("8_800")  # free + position market value (1800 + 2000)
 
 
 class FakePosition:
@@ -78,10 +79,11 @@ def _in_memory_db(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_nav_includes_cash_and_positions() -> None:
+def test_nav_is_t212_account_total() -> None:
     snap = LivePortfolioSnapshot(FakeT212())
-    # cash: 5k+20k=25k; AAPL: 10*180=1800; MSFT: 5*400=2000; total=28800
-    assert snap.nav == Decimal("28_800")
+    # NAV is T212's reported account total, not a re-derived sum (which would
+    # double-count the invested portion).
+    assert snap.nav == Decimal("8_800")
 
 
 def test_position_value_known_ticker() -> None:

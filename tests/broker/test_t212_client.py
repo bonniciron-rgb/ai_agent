@@ -119,6 +119,19 @@ def test_get_positions_empty_list() -> None:
     assert client.get_positions() == []
 
 
+def test_get_positions_handles_null_fx_ppl() -> None:
+    """T212 sends fxPpl=null for account-currency instruments (e.g. London ETFs)."""
+    payload = [{**POSITIONS_PAYLOAD[0], "fxPpl": None, "ppl": None}]
+    client = T212Client(
+        api_key="test",
+        http_client=_mock_client({"/api/v0/equity/portfolio": (200, payload)}),
+    )
+    positions = client.get_positions()
+    assert len(positions) == 1
+    assert positions[0].fx_ppl == Decimal("0")
+    assert positions[0].ppl == Decimal("0")
+
+
 # ---------------------------------------------------------------------------
 # Tests: get_orders
 # ---------------------------------------------------------------------------
