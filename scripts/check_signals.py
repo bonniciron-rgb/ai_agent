@@ -62,11 +62,11 @@ def check_yfinance() -> tuple[bool, str]:
         return False, str(exc)[:120]
 
 
-def check_stooq() -> tuple[bool, str]:
+def check_yahoo_chart() -> tuple[bool, str]:
     try:
-        from ai_agent.data.stooq_source import StooqSource
+        from ai_agent.data.yahoo_chart_source import YahooChartSource
 
-        src = StooqSource()
+        src = YahooChartSource()
         bars = src.get_daily("AAPL", start=date.today() - timedelta(days=10), end=date.today())
         if not bars.points:
             return False, "no bars returned"
@@ -264,8 +264,8 @@ def main() -> int:
     print("\n[2/3] Free sources (no key required):")
     yf_ok, yf_msg = check_yfinance()
     line("yfinance", yf_ok, yf_msg)
-    stooq_ok, stooq_msg = check_stooq()
-    line("Stooq (fallback)", stooq_ok, stooq_msg, optional=True)
+    yahoo_ok, yahoo_msg = check_yahoo_chart()
+    line("Yahoo chart (fallback)", yahoo_ok, yahoo_msg, optional=True)
     edgar_ok, edgar_msg = check_sec_edgar()
     line("SEC EDGAR", edgar_ok, edgar_msg)
 
@@ -298,10 +298,11 @@ def main() -> int:
     required = [yf_ok, edgar_ok, db_ok, anth_ok, finn_ok, fred_ok, t212_ok, bot_ok, tg_ok]
     passed = sum(1 for r in required if r)
     total = len(required)
-    optional = [stooq_ok, news_ok]
+    optional = [yahoo_ok, news_ok]
     optional_passed = sum(1 for r in optional if r)
     print(
-        f" Required: {passed}/{total}  |  Optional: {optional_passed}/2 (Stooq fallback, NewsAPI)"
+        f" Required: {passed}/{total}  |  "
+        f"Optional: {optional_passed}/2 (Yahoo chart fallback, NewsAPI)"
     )
     print("=" * 70)
 

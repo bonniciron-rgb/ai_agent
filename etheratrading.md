@@ -209,6 +209,8 @@ backup OHLCV source, so there was effectively no working fallback.
 - **`data/stooq_source.py`** + its test — deleted.
 - **`loop/daily_loop.py`** — OHLCV chain is now
   `[YFinanceSource, YahooChartSource]`.
+- **`scripts/backfill_watchlist.py`**, **`scripts/check_signals.py`** — moved
+  off the deleted Stooq source onto `YahooChartSource`.
 
 ---
 

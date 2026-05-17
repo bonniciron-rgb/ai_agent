@@ -7,7 +7,7 @@ Steps
 1. Init DB schema (idempotent).
 2. Load DB-backed watchlist (bootstrapped from yaml).
 3. Check the DB-backed halt flag (toggled by ``/halt`` Telegram command).
-4. Ingest fresh OHLCV bars for every watchlist symbol (yfinance + Stooq fallback).
+4. Ingest fresh OHLCV bars for every watchlist symbol (yfinance + Yahoo-chart fallback).
 5. Build T212 client + LivePortfolioSnapshot.
 6. Run the Claude agent with a Toolbox wired to live data.
 7. Filter each proposal through RiskChecker (5 rails).
@@ -65,7 +65,7 @@ NEWS_DAYS_BACK = 7
 
 
 def _build_default_ohlcv_source():
-    """Construct the default OHLCV source chain: yfinance → Stooq fallback."""
+    """Construct the default OHLCV source chain: yfinance → Yahoo-chart fallback."""
     from ai_agent.data.registry import OhlcvChain
     from ai_agent.data.yahoo_chart_source import YahooChartSource
     from ai_agent.data.yfinance_source import YFinanceSource

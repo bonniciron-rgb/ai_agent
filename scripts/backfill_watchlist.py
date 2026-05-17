@@ -19,7 +19,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from ai_agent.data.registry import OhlcvChain
-from ai_agent.data.stooq_source import StooqSource
+from ai_agent.data.yahoo_chart_source import YahooChartSource
 from ai_agent.data.yfinance_source import YFinanceSource
 from ai_agent.db.engine import init_schema
 from ai_agent.loop.bar_store import ingest_bars
@@ -68,7 +68,7 @@ def main() -> None:
 
     init_schema()
 
-    source = OhlcvChain([YFinanceSource(), StooqSource()])
+    source = OhlcvChain([YFinanceSource(), YahooChartSource()])
 
     total = ingest_bars(symbols, source=source, days_back=days_back)
     logger.info("Done — inserted %d new bars total.", total)
