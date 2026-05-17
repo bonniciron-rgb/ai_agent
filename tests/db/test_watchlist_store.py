@@ -149,3 +149,13 @@ def test_to_watchlist_converts(tmp_path):
     googl = next(e for e in watchlist.entries if e.symbol == "GOOGL")
     assert googl.tags == ["mega"]
     assert googl.sector == "communication_services"
+
+
+def test_to_watchlist_excludes_paused():
+    add_entry(symbol="NVDA")
+    paused = add_entry(symbol="AIQGL")
+    update_entry(paused.id, paused=True)
+
+    symbols = [e.symbol for e in to_watchlist().entries]
+    assert "NVDA" in symbols
+    assert "AIQGL" not in symbols

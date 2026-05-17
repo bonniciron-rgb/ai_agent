@@ -136,6 +136,12 @@ def delete_entry(entry_id: int) -> bool:
 
 
 def to_watchlist():
+    """Build the agent-facing Watchlist from the DB.
+
+    Paused ("not followed") tickers are excluded — the agent only screens
+    and proposes against actively-followed symbols. The watchlist editor
+    reads the raw rows separately, so paused tickers stay visible there.
+    """
     from ai_agent.watchlist import Watchlist, WatchlistEntry
 
     rows = list_entries()
@@ -147,5 +153,6 @@ def to_watchlist():
             tags=json.loads(row.tags_json or "[]"),
         )
         for row in rows
+        if not row.paused
     ]
     return Watchlist(entries=entries)
