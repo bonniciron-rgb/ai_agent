@@ -183,7 +183,9 @@ class FakeOhlcv:
 
 class FakeT212:
     def get_cash(self):
-        return SimpleNamespace(free=Decimal("50_000"), invested=Decimal("0"))
+        return SimpleNamespace(
+            free=Decimal("50_000"), invested=Decimal("0"), total=Decimal("50_000")
+        )
 
     def get_positions(self):
         return []

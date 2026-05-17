@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class CashInfo(BaseModel):
@@ -29,6 +29,14 @@ class OpenPosition(BaseModel):
     frontend: str | None = None
 
     model_config = {"populate_by_name": True}
+
+    @field_validator("ppl", "fx_ppl", mode="before")
+    @classmethod
+    def _none_to_zero(cls, v: object) -> object:
+        # T212 sends fxPpl=null for account-currency (non-FX) instruments
+        # such as GBP-denominated London ETFs; a field default only covers
+        # an absent key, not an explicit null.
+        return Decimal(0) if v is None else v
 
 
 class LimitOrderRequest(BaseModel):

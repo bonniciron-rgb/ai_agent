@@ -195,6 +195,28 @@ So the *deliverable, honest* product is currently "**a low-beta equity sleeve**"
 
 ---
 
+### Batch 35: Fix — positions load (fxPpl null) + NAV double-count [2026-05-17]
+**PR (draft)**
+
+First fully-clean live run (exit 0, schema self-healed 4 columns) still
+showed "no open positions" and surfaced a latent NAV bug:
+
+- **`broker/models.py`** — `/api/v0/equity/portfolio` returned 200 but
+  `OpenPosition` rejected `fxPpl: null`. T212 sends `fxPpl=null` for
+  account-currency (non-FX) instruments like GBP London ETFs; a field
+  default only covers an *absent* key, not an explicit null. Added a
+  `before` validator coercing `None → Decimal(0)` for `ppl`/`fx_ppl`.
+- **`loop/portfolio_snapshot.py`** — `_load_from_t212` computed
+  `nav = free + invested + Σ(position values)`, double-counting the
+  invested portion once positions load. NAV is now T212's `total`
+  (the account NAV) directly.
+
+Known follow-up: per-position values + the agent's sizing are still
+currency-naive (GBX/USD not normalised to GBP — the FX/metadata logic
+PR #75 added to the dashboard is not yet ported to the loop).
+
+---
+
 ### Batch 34: Agent skips paused (not-followed) watchlist tickers [2026-05-17]
 **PR (draft)**
 
