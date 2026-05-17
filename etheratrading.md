@@ -195,6 +195,31 @@ So the *deliverable, honest* product is currently "**a low-beta equity sleeve**"
 
 ---
 
+### Batch 33: Fix — Daily loop crash + endpoint/parse bugs [2026-05-17]
+**PR (draft)**
+
+First run that reached live T212 (NAV £3310.59) surfaced three bugs:
+
+- **`t212_client.py`** — `get_positions()` used `/api/v0/equity/portfolio/`
+  `open-positions`, which T212 treats as ticker `open-positions` → 404.
+  Corrected to `/api/v0/equity/portfolio` (the endpoint the dashboard
+  already uses). Position concentration rails were running blind.
+- **`db/engine.py`** — FATAL: `column order.idempotency_key does not exist`
+  crashed the loop (exit 1) during the risk-rail check, *after* the agent
+  produced its proposal. `create_all` never ALTERs existing tables, so a
+  model column added later stays missing. `init_schema()` now reconciles
+  drift via `ADD COLUMN IF NOT EXISTS` (Postgres-only, nullable-only). The
+  loop calls `init_schema()` at startup, so it self-heals next run.
+- **`agent/screening.py`** — Haiku wrapped its JSON in a ```` ```json ````
+  fence; `json.loads` failed → empty shortlist → decision pass ran on all
+  30 symbols instead of 5 (≈6× Opus cost). Added `_extract_json_object()`
+  to slice the outermost `{...}`.
+
+Known follow-up (data, not code): watchlist still holds London-ETF junk
+tickers (AIQGL/JAYL/VHYDL/VWRPL/FB/MSFD/NVDD/SZZL) — no US bar data.
+
+---
+
 ### Batch 32: Fix — Default T212 env to live [2026-05-17]
 **PR (draft)**
 

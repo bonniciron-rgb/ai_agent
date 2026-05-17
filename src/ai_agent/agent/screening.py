@@ -181,7 +181,7 @@ def run_screening(
         return result
 
     try:
-        parsed = json.loads(raw_text)
+        parsed = json.loads(_extract_json_object(raw_text))
         entries_raw = parsed.get("shortlist", [])
         if not isinstance(entries_raw, list):
             raise ValueError("shortlist must be a list")
@@ -209,6 +209,19 @@ def run_screening(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _extract_json_object(text: str) -> str:
+    """Return the outermost ``{...}`` span of *text*.
+
+    The model is asked for bare JSON but sometimes wraps it in a
+    ```json ... ``` markdown fence or adds prose; slicing from the first
+    ``{`` to the last ``}`` strips both without a fragile fence parser.
+    """
+    start, end = text.find("{"), text.rfind("}")
+    if start != -1 and end > start:
+        return text[start : end + 1]
+    return text
 
 
 def _extract_text(response: Any) -> str:

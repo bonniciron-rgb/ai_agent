@@ -98,7 +98,7 @@ class T212Client:
 
     def get_positions(self) -> list[OpenPosition]:
         """Return all open equity positions."""
-        data = self._get("/api/v0/equity/portfolio/open-positions")
+        data = self._get("/api/v0/equity/portfolio")
         return [OpenPosition.model_validate(p) for p in data]
 
     # ------------------------------------------------------------------
