@@ -30,6 +30,7 @@ const GROUPS: { label: string; links: NavLink[] }[] = [
       { href: "/regime", label: "Regime" },
       { href: "/leaders", label: "Leaders" },
       { href: "/insiders", label: "Insiders" },
+      { href: "/buzz", label: "Buzz" },
       { href: "/ipos", label: "IPOs" },
       { href: "/signals", label: "Signals" },
       { href: "/watchlist", label: "Watchlist" },
