@@ -195,6 +195,22 @@ So the *deliverable, honest* product is currently "**a low-beta equity sleeve**"
 
 ---
 
+### Batch 44: Fix — buzz tracker via ApeWisdom (Reddit blocks Vercel) [2026-05-17]
+**PR (draft)**
+
+Reddit blocks unauthenticated `.json` requests from datacenter IPs, so the
+Batch 43 `/buzz` page showed "Reddit is unreachable" on Vercel.
+
+- **`lib/buzz.ts`** (new, replaces `lib/reddit.ts`) — sources buzz from
+  ApeWisdom (apewisdom.io), a keyless Reddit-mention aggregator that works
+  from any IP. Its 24h-ago counts enable a real **momentum** filter:
+  tickers are classed rising / steady / fading by mention acceleration,
+  ranked by engagement-weighted buzz, low-traction names dropped.
+- **`app/buzz/page.tsx`** — adds a "vs 24h" momentum column + Trend badge;
+  the "Accelerating" callout flags sharply-rising buzz.
+
+---
+
 ### Batch 43: BR-2 — Reddit retail-buzz tracker (noise-filtered) [2026-05-17]
 **PR (draft)**
 
