@@ -195,8 +195,27 @@ So the *deliverable, honest* product is currently "**a low-beta equity sleeve**"
 
 ---
 
-### Batch 30: Portfolio — Friendly Instrument Names [2026-05-17]
+### Batch 31: Portfolio — Normalise Position Values to GBP [2026-05-17]
 **PR (draft)**
+
+User reported a holding showing a ~£18,900 value it couldn't be worth.
+Cause: London-listed ETFs quote in **pence (GBX)**, and the route treated the
+quote price as pounds — inflating every London holding ~100×.
+
+- **`route.ts`** — instrument metadata now also yields `currencyCode`;
+  `toGbp()` converts each position's prices to GBP: `GBX`/`GBp` ÷100 (a unit,
+  not FX), other currencies via live FX (`api.frankfurter.app`, cached 12h).
+  `PortfolioPosition` gains a `currency` field.
+- **`PortfolioClient.tsx`** — shows the native quote currency (e.g. `· USD`)
+  next to non-GBP tickers so the conversion is transparent.
+
+Total value / 1d-7d change were already correct (T212's cash `total` is in
+account currency); this fixes per-position values + the donut.
+
+---
+
+### Batch 30: Portfolio — Friendly Instrument Names [2026-05-17]
+**PR #74 (merged)**
 
 The positions table showed bare tickers (`VWRP`, `NVDA`). It now shows the
 human-readable instrument name:
