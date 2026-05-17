@@ -28,7 +28,10 @@ class Settings(BaseSettings):
 
     t212_api_key: SecretStr = Field(default=SecretStr(""))
     t212_api_secret: SecretStr = Field(default=SecretStr(""))
-    t212_env: T212Env = T212Env.demo
+    # Default to live: the account is live-only, so when T212_ENV is unset the
+    # read-only daily/reconcile loops would otherwise hit the demo endpoint and
+    # 401 silently with live credentials. Order placement is gated by run_mode.
+    t212_env: T212Env = T212Env.live
 
     telegram_bot_token: SecretStr = Field(default=SecretStr(""))
     telegram_chat_id: str = ""

@@ -195,8 +195,24 @@ So the *deliverable, honest* product is currently "**a low-beta equity sleeve**"
 
 ---
 
-### Batch 31: Portfolio — Normalise Position Values to GBP [2026-05-17]
+### Batch 32: Fix — Default T212 env to live [2026-05-17]
 **PR (draft)**
+
+Daily loop kept hitting `demo.trading212.com` and 401'ing with live
+credentials → NAV $0 → no sized proposals. Commit `702e104` patched the
+`daily.yml` workflow default (`|| 'demo'` → `|| 'live'`) but left the Python
+code defaulting to demo.
+
+- **`settings.py`** — `Settings.t212_env` default `demo` → `live`. The account
+  is live-only; when `T212_ENV` is unset (or a re-run reuses a pre-`702e104`
+  workflow file) the loop now reads the live endpoint instead of 401ing.
+  Order placement stays gated by `run_mode`, not this.
+- **`test_settings.py`** — default-assertion updated to `T212Env.live`.
+
+---
+
+### Batch 31: Portfolio — Normalise Position Values to GBP [2026-05-17]
+**PR (merged)**
 
 User reported a holding showing a ~£18,900 value it couldn't be worth.
 Cause: London-listed ETFs quote in **pence (GBX)**, and the route treated the
