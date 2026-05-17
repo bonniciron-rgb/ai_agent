@@ -195,6 +195,24 @@ So the *deliverable, honest* product is currently "**a low-beta equity sleeve**"
 
 ---
 
+### Batch 43: BR-2 — Reddit retail-buzz tracker (noise-filtered) [2026-05-17]
+**PR (draft)**
+
+A `/buzz` page surfacing the most-discussed tickers on investing subreddits,
+with layered noise-filtering so it highlights real trends, not chatter.
+
+- **`lib/reddit.ts`** (new) — pulls hot posts from r/wallstreetbets,
+  r/stocks, r/StockMarket. Filters: ticker candidates validated against the
+  SEC ticker universe, slang stopwords dropped, one-off mentions (<3)
+  discarded, ranked by **engagement-weighted** buzz (log-damped upvotes +
+  comments) so low-effort posts can't fake a trend. Top filtered cluster is
+  flagged "strong". Cached 6h.
+- **`app/buzz/page.tsx`** (new) — ranked table + a "worth a look" callout;
+  clearly labelled a sentiment signal, not a buy recommendation.
+- **`Nav.tsx`** — "Buzz" link under Markets.
+
+---
+
 ### Batch 42: BR-2 — Insider (Form 4) activity tracker [2026-05-17]
 **PR (draft)**
 
