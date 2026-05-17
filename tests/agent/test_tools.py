@@ -19,6 +19,7 @@ def test_all_expected_tools_present() -> None:
         "get_news",
         "get_portfolio",
         "get_external_signals",
+        "get_institutional_holdings",
         "propose_trade",
     }
 
