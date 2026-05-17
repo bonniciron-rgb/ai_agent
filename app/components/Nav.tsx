@@ -16,6 +16,7 @@ interface NavLink {
 // Daily-use links — always visible on desktop.
 const PRIMARY: NavLink[] = [
   { href: "/", label: "Dashboard" },
+  { href: "/portfolio", label: "Portfolio" },
   { href: "/proposals", label: "Proposals" },
   { href: "/analysis", label: "Analysis" },
   { href: "/orders", label: "Orders" },
