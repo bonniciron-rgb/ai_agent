@@ -195,6 +195,23 @@ So the *deliverable, honest* product is currently "**a low-beta equity sleeve**"
 
 ---
 
+### Batch 34: Agent skips paused (not-followed) watchlist tickers [2026-05-17]
+**PR (draft)**
+
+The watchlist editor already had a Pause/Resume toggle (`WatchlistTicker.`
+`paused`), but `to_watchlist()` — the agent-facing loader used by the daily
+loop — returned every row regardless. Paused tickers were still ingested,
+screened, and sent to the (expensive) decision pass.
+
+- **`db/watchlist_store.py`** — `to_watchlist()` now excludes `paused` rows.
+  The watchlist editor reads raw rows via `/api/watchlist`, so paused
+  tickers stay visible and editable there.
+
+Lets the user mute junk tickers (e.g. London-ETF symbols with no US data)
+without deleting them.
+
+---
+
 ### Batch 33: Fix — Daily loop crash + endpoint/parse bugs [2026-05-17]
 **PR (draft)**
 
