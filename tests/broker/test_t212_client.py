@@ -101,9 +101,7 @@ def test_get_cash_parses_response() -> None:
 def test_get_positions_returns_list() -> None:
     client = T212Client(
         api_key="test",
-        http_client=_mock_client(
-            {"/api/v0/equity/portfolio": (200, POSITIONS_PAYLOAD)}
-        ),
+        http_client=_mock_client({"/api/v0/equity/portfolio": (200, POSITIONS_PAYLOAD)}),
     )
     positions = client.get_positions()
     assert len(positions) == 1

@@ -68,8 +68,7 @@ def _add_missing_columns(engine: Engine) -> None:
                     continue
                 col_type = col.type.compile(engine.dialect)
                 conn.exec_driver_sql(
-                    f'ALTER TABLE "{table.name}" '
-                    f'ADD COLUMN IF NOT EXISTS "{col.name}" {col_type}'
+                    f'ALTER TABLE "{table.name}" ADD COLUMN IF NOT EXISTS "{col.name}" {col_type}'
                 )
                 logger.warning(
                     "Schema drift: added missing column %s.%s (%s)",
