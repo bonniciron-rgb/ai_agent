@@ -195,6 +195,24 @@ So the *deliverable, honest* product is currently "**a low-beta equity sleeve**"
 
 ---
 
+### Batch 41: BR-2 — IPO calendar tracker [2026-05-17]
+**PR (draft)**
+
+Second visible slice of BR-2: a `/ipos` page tracking recent and upcoming
+US IPOs (the "emerging companies" half of the requirement).
+
+- **`lib/ipos.ts`** (new) — fetches Finnhub's IPO-calendar endpoint for a
+  -30d/+60d window; cached 6h. Degrades gracefully if `FINNHUB_API_KEY` is
+  absent in the environment.
+- **`app/ipos/page.tsx`** (new) — sortable table: date, symbol, company,
+  exchange, price, status (with upcoming/priced/withdrawn styling).
+- **`Nav.tsx`** — "IPOs" link under Markets.
+
+Follow-up: agent integration (screen fresh IPOs into proposals) and
+X/Twitter leader feeds (paid API).
+
+---
+
 ### Batch 40: BR-2 — Agent can read institutional 13F holdings [2026-05-17]
 **PR (draft)**
 
