@@ -195,6 +195,25 @@ So the *deliverable, honest* product is currently "**a low-beta equity sleeve**"
 
 ---
 
+### Batch 39: BR-2 (start) — Institutional 13F "smart money" tracker [2026-05-17]
+**PR (draft)**
+
+First slice of BR-2: a `/leaders` page tracking what widely-followed
+institutional investors hold, from their quarterly SEC 13F filings.
+
+- **`lib/thirteenf.ts`** (new) — fetches a manager's latest 13F-HR from SEC
+  EDGAR (submissions → filing index → information-table XML), merges lots by
+  issuer, ranks by value. Keyless; EDGAR responses cached 6h.
+- **`app/leaders/page.tsx`** (new) — per-manager card with top-10 holdings by
+  portfolio %. Curated set: Berkshire (Buffett), Scion (Burry), Pershing
+  Square (Ackman).
+- **`Nav.tsx`** — "Leaders" link under Markets.
+
+Follow-ups: agent integration (screen 13F holdings → proposals), the
+IPO/emerging-company half of BR-2, and X/Twitter leader feeds (paid API).
+
+---
+
 ### Batch 38: BR-1 — Per-proposal risk score [2026-05-17]
 **PR (draft)**
 
@@ -945,7 +964,7 @@ Every trade proposal must carry a **risk score of 1–5** (1 = lowest risk,
 - Persist the score + reason on the `Proposal` record so decisions remain
   auditable after the fact.
 
-### BR-2: Market Leaders & Emerging-Company Tracker
+### BR-2: Market Leaders & Emerging-Company Tracker  🚧 In progress (Batch 39 — 13F tracker)
 A **separate section/page**, distinct from the watchlist flow, that tracks
 market leaders and new/emerging companies — including **IPOs**.
 
