@@ -303,6 +303,13 @@ function PositionsTable({ positions }: { positions: PortfolioPosition[] }) {
                       </div>
                       <div className="font-mono text-xs text-zinc-500">
                         {p.symbol}
+                        {p.currency &&
+                          p.currency.toUpperCase() !== "GBP" && (
+                            <span className="text-zinc-600">
+                              {" "}
+                              · {p.currency}
+                            </span>
+                          )}
                       </div>
                     </div>
                   ) : (

@@ -5,6 +5,10 @@
  * for the Portfolio dashboard page. Each position is flagged with whether its
  * symbol is already in the watchlist. Read-only; HTTP Basic auth.
  *
+ * Position prices are normalised to GBP: London listings quote in pence (GBX,
+ * /100) and other currencies are converted via live FX rates, so a pence
+ * price is not mistaken for pounds.
+ *
  * Also upserts a daily snapshot of total account value into
  * `portfoliovaluesnapshot` so the UI can show 1-day / 7-day change.
  */
@@ -21,10 +25,11 @@ export interface PortfolioPosition {
   ticker: string; // raw T212 ticker, e.g. "AAPL_US_EQ"
   symbol: string; // plain symbol, e.g. "AAPL"
   name: string; // human-readable instrument name, e.g. "Apple Inc."
+  currency: string; // instrument quote currency, e.g. "USD", "GBX"
   quantity: number;
-  averagePrice: number;
-  currentPrice: number;
-  marketValue: number;
+  averagePrice: number; // converted to GBP
+  currentPrice: number; // converted to GBP
+  marketValue: number; // GBP
   pnl: number;
   pnlPct: number;
   inWatchlist: boolean;
@@ -61,20 +66,27 @@ function plainSymbol(ticker: string): string {
   return seg.toUpperCase();
 }
 
-// Module-level cache of T212 instrument ticker -> human-readable name.
-// The metadata endpoint returns the whole instrument universe (large), so
-// it is fetched at most once per day per warm serverless instance.
-let instrumentCache: { at: number; names: Map<string, string> } | null = null;
-const INSTRUMENT_TTL_MS = 24 * 60 * 60 * 1000;
+// Module-level cache of T212 instrument metadata (name + quote currency).
+// The metadata endpoint returns the whole instrument universe (large), so it
+// is fetched at most once per day per warm serverless instance.
+interface InstrumentMeta {
+  name: string;
+  currency: string;
+}
+let instrumentCache: {
+  at: number;
+  meta: Map<string, InstrumentMeta>;
+} | null = null;
+const META_TTL_MS = 24 * 60 * 60 * 1000;
 
-async function getInstrumentNames(
+async function getInstrumentMeta(
   base: string,
   headers: Record<string, string>,
-): Promise<Map<string, string>> {
-  if (instrumentCache && Date.now() - instrumentCache.at < INSTRUMENT_TTL_MS) {
-    return instrumentCache.names;
+): Promise<Map<string, InstrumentMeta>> {
+  if (instrumentCache && Date.now() - instrumentCache.at < META_TTL_MS) {
+    return instrumentCache.meta;
   }
-  const names = new Map<string, string>();
+  const meta = new Map<string, InstrumentMeta>();
   try {
     const res = await fetch(`${base}/api/v0/equity/metadata/instruments`, {
       headers,
@@ -85,19 +97,66 @@ async function getInstrumentNames(
       if (Array.isArray(list)) {
         for (const it of list as Record<string, unknown>[]) {
           const t = typeof it.ticker === "string" ? it.ticker : "";
-          const n =
+          if (!t) continue;
+          const name =
             (typeof it.name === "string" && it.name.trim()) ||
             (typeof it.shortName === "string" && it.shortName.trim()) ||
             "";
-          if (t && n) names.set(t, n);
+          const currency =
+            typeof it.currencyCode === "string" ? it.currencyCode.trim() : "";
+          meta.set(t, { name, currency });
         }
       }
-      if (names.size > 0) instrumentCache = { at: Date.now(), names };
+      if (meta.size > 0) instrumentCache = { at: Date.now(), meta };
     }
   } catch {
-    // Metadata unavailable — positions fall back to the bare symbol.
+    // Metadata unavailable — positions fall back to bare symbol + raw price.
   }
-  return names;
+  return meta;
+}
+
+// Module-level cache of FX rates expressed as 1 GBP = <rate> <currency>.
+let fxCache: { at: number; rates: Record<string, number> } | null = null;
+const FX_TTL_MS = 12 * 60 * 60 * 1000;
+
+async function getGbpFxRates(): Promise<Record<string, number>> {
+  if (fxCache && Date.now() - fxCache.at < FX_TTL_MS) return fxCache.rates;
+  try {
+    const res = await fetch("https://api.frankfurter.app/latest?base=GBP", {
+      cache: "no-store",
+    });
+    if (res.ok) {
+      const body = (await res.json()) as { rates?: Record<string, number> };
+      if (body.rates && Object.keys(body.rates).length > 0) {
+        fxCache = { at: Date.now(), rates: body.rates };
+        return body.rates;
+      }
+    }
+  } catch {
+    // FX unavailable — non-GBP positions fall back to their raw price.
+  }
+  return fxCache?.rates ?? {};
+}
+
+/**
+ * Convert an instrument-currency price to GBP.
+ *   GBP        -> unchanged
+ *   GBX / GBp  -> pence: divide by 100 (a unit, not an FX rate — London
+ *                 listings such as ETFs quote in pence)
+ *   other      -> divide by the GBP->currency rate; if the rate is unknown
+ *                 the price is returned unchanged.
+ */
+function toGbp(
+  price: number,
+  currency: string,
+  fx: Record<string, number>,
+): number {
+  const c = currency.trim();
+  if (c === "GBX" || c === "GBp" || c.toUpperCase() === "GBX") return price / 100;
+  const cu = c.toUpperCase();
+  if (!cu || cu === "GBP") return price;
+  const rate = fx[cu];
+  return rate && rate > 0 ? price / rate : price;
 }
 
 function changeVs(
@@ -195,10 +254,11 @@ export async function GET() {
   const headers = { Authorization: `Basic ${token}`, Accept: "application/json" };
 
   try {
-    const [cashRes, posRes, instrumentNames] = await Promise.all([
+    const [cashRes, posRes, instrumentMeta, fxRates] = await Promise.all([
       fetch(`${base}/api/v0/equity/account/cash`, { headers, cache: "no-store" }),
       fetch(`${base}/api/v0/equity/portfolio`, { headers, cache: "no-store" }),
-      getInstrumentNames(base, headers),
+      getInstrumentMeta(base, headers),
+      getGbpFxRates(),
     ]);
 
     if (!cashRes.ok || !posRes.ok) {
@@ -237,10 +297,12 @@ export async function GET() {
     ).map((p: Record<string, unknown>) => {
       const ticker = String(p.ticker ?? "");
       const symbol = plainSymbol(ticker);
-      const name = instrumentNames.get(ticker) || symbol;
+      const meta = instrumentMeta.get(ticker);
+      const name = meta?.name || symbol;
+      const currency = meta?.currency || "";
       const quantity = Number(p.quantity ?? 0);
-      const averagePrice = Number(p.averagePrice ?? 0);
-      const currentPrice = Number(p.currentPrice ?? 0);
+      const averagePrice = toGbp(Number(p.averagePrice ?? 0), currency, fxRates);
+      const currentPrice = toGbp(Number(p.currentPrice ?? 0), currency, fxRates);
       const marketValue = quantity * currentPrice;
       const cost = quantity * averagePrice;
       const pnl = p.ppl !== undefined ? Number(p.ppl) : marketValue - cost;
@@ -249,6 +311,7 @@ export async function GET() {
         ticker,
         symbol,
         name,
+        currency,
         quantity,
         averagePrice,
         currentPrice,
