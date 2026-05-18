@@ -195,6 +195,18 @@ So the *deliverable, honest* product is currently "**a low-beta equity sleeve**"
 
 ---
 
+### Batch 45: Fix — relabel "considered" → "proposed" on analysis card [2026-05-17]
+**PR (draft)**
+
+The "Today's analysis" card showed `{proposals_generated} considered`, which
+read as "symbols considered" — alarming as "0 considered" when the agent
+simply generated no proposals (its normal no-trade outcome). `proposals_`
+`generated` is the count of proposals the agent *produced*, not symbols
+analysed. Relabelled to "proposed" on `app/proposals/page.tsx` and
+`app/analysis/AnalysisClient.tsx`. UI-only; no behaviour change.
+
+---
+
 ### Batch 44: Fix — buzz tracker via ApeWisdom (Reddit blocks Vercel) [2026-05-17]
 **PR (draft)**
 

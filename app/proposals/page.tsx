@@ -252,7 +252,7 @@ function TodaysAnalysisCard({ analysis }: { analysis: DailyAnalysis | null }) {
       <p className="mt-2 text-sm text-zinc-400">{firstLine}</p>
       <div className="mt-2 flex items-center gap-4 text-xs text-zinc-600">
         <span>
-          {analysis.proposals_generated} considered · {analysis.proposals_blocked_risk} risk-blocked
+          {analysis.proposals_generated} proposed · {analysis.proposals_blocked_risk} risk-blocked
         </span>
         <a href="/analysis" className="text-emerald-400 hover:underline">
           Full analysis →

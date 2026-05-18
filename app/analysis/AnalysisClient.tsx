@@ -106,7 +106,7 @@ export default function AnalysisClient() {
                     <OutcomePill row={row} />
                   </span>
                   <span className="text-xs text-zinc-500">
-                    {row.proposals_generated} considered · {row.proposals_blocked_risk} risk-blocked
+                    {row.proposals_generated} proposed · {row.proposals_blocked_risk} risk-blocked
                     {" · "}
                     {open ? "▲" : "▼"}
                   </span>
