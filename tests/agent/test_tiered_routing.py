@@ -484,3 +484,53 @@ def test_build_screening_user_message_no_context_backward_compatible() -> None:
     assert "MSFT" in msg
     # Original compact comma-separated format
     assert "AAPL, MSFT" in msg
+
+
+# ---------------------------------------------------------------------------
+# Test: already-held tickers are excluded before screening
+# ---------------------------------------------------------------------------
+
+
+def _toolbox_holding(*tickers: str) -> Toolbox:
+    """Like _simple_toolbox, but reports the given tickers as open positions.
+
+    Position keys are full T212 tickers (e.g. AAPL_US_EQ), matching the
+    real get_portfolio output.
+    """
+    tb = _simple_toolbox()
+    positions = {f"{t}_US_EQ": "100" for t in tickers}
+    tb.get_portfolio = lambda i: {"cash": 50_000.0, "positions": positions}
+    return tb
+
+
+def test_held_symbols_strips_venue_suffix() -> None:
+    """_held_symbols returns plain symbols from full T212 position tickers."""
+    from ai_agent.agent.runner import _held_symbols
+
+    assert _held_symbols(_toolbox_holding("AAPL", "CSCO")) == {"AAPL", "CSCO"}
+    assert _held_symbols(_simple_toolbox()) == set()
+
+
+def test_screening_excludes_held_tickers() -> None:
+    """A watchlist symbol that is already held must be dropped before screening."""
+    client = RecordingClient(
+        responses=[
+            _screening_response([]),  # empty shortlist → fallback to un-held universe
+            _decision_end_turn(),
+        ]
+    )
+
+    result = run_agent(
+        watchlist=["AAA", "BBB", "CCC"],
+        toolbox=_toolbox_holding("BBB"),
+        client=client,
+        tiered=True,
+        screening_model="claude-haiku-4-5-20251001",
+        decision_model="claude-opus-4-7",
+    )
+
+    assert result.stop_reason == "screening_empty_fallback"
+    decision_user_msg = client.calls[1]["messages"][0]["content"]
+    assert "AAA" in decision_user_msg
+    assert "CCC" in decision_user_msg
+    assert "BBB" not in decision_user_msg

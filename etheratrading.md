@@ -195,6 +195,26 @@ So the *deliverable, honest* product is currently "**a low-beta equity sleeve**"
 
 ---
 
+### Batch 46: Exclude already-held tickers from screening [2026-05-17]
+**PR (draft)**
+
+The agent's no-re-entry rule (don't buy what you already hold) was applied in
+the *decision* pass — *after* screening had already spent shortlist slots on
+held names. On a recent run 4 of 5 shortlisted names were held, leaving the
+Opus decision pass just 1 genuine new candidate → "no trade".
+
+- **`agent/runner.py`** — `_run_tiered` now drops already-held tickers from
+  the screening universe up front (`_held_symbols()` reads the portfolio,
+  strips the T212 venue suffix). The empty-shortlist fallback uses the
+  un-held universe too. So all shortlist slots go to real new candidates.
+- **`tests/agent/test_tiered_routing.py`** — covers suffix-stripping and
+  held-ticker exclusion.
+
+Note: held names are still skipped for *buys* by the prompt rule; active
+exit-management of held positions would be a separate dedicated pass.
+
+---
+
 ### Batch 45: Fix — relabel "considered" → "proposed" on analysis card [2026-05-17]
 **PR (draft)**
 

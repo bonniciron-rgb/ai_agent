@@ -264,6 +264,25 @@ def _run_decision_pass(
 # ---------------------------------------------------------------------------
 
 
+def _held_symbols(toolbox: Toolbox) -> set[str]:
+    """Plain symbols of currently-held positions, for screening exclusion.
+
+    Position keys are full T212 tickers (e.g. ``AAPL_US_EQ``); the watchlist
+    uses plain symbols, so the venue suffix is stripped.
+    """
+    held: set[str] = set()
+    try:
+        pf = toolbox.get_portfolio({})
+        positions = pf.get("positions", {}) if isinstance(pf, dict) else {}
+        for raw in positions:
+            plain = str(raw).split("_")[0].upper()
+            if plain:
+                held.add(plain)
+    except Exception as exc:
+        logger.warning("Could not read portfolio for screening exclusion: %s", exc)
+    return held
+
+
 def _run_tiered(
     watchlist: list[str],
     toolbox: Toolbox,
@@ -274,13 +293,26 @@ def _run_tiered(
     max_tokens: int,
     shortlist_max: int,
 ) -> AgentResult:
-    """Stage 1: Haiku screens the full watchlist.  Stage 2: Opus decides."""
+    """Stage 1: Haiku screens the watchlist (held names excluded). Stage 2: Opus decides."""
     from ai_agent.agent.screening import run_screening
 
     screening_client = _ScreeningClientAdapter(client)
 
+    # Exclude already-held tickers up front: the no-re-entry rule would
+    # disqualify them in the decision pass anyway, so letting them consume
+    # screening shortlist slots starves genuine new candidates.
+    held = _held_symbols(toolbox)
+    screening_universe = [s for s in watchlist if s.upper() not in held]
+    if len(screening_universe) < len(watchlist):
+        logger.info(
+            "Screening universe: %d/%d watchlist symbols (%d already held, excluded)",
+            len(screening_universe),
+            len(watchlist),
+            len(watchlist) - len(screening_universe),
+        )
+
     symbol_context: dict[str, str] = {}
-    for sym in watchlist:
+    for sym in screening_universe:
         try:
             feats = toolbox.get_features({"symbol": sym})
             symbol_context[sym] = json.dumps(feats, default=str)[:600]
@@ -288,7 +320,7 @@ def _run_tiered(
             logger.warning("Could not fetch features for %s during screening: %s", sym, exc)
 
     screening_result = run_screening(
-        watchlist,
+        screening_universe,
         client=screening_client,  # type: ignore[arg-type]
         model=screening_model,
         max_tokens=1024,
@@ -312,11 +344,12 @@ def _run_tiered(
     used_fallback = False
     if not screening_result.shortlist:
         logger.info(
-            "Screening returned empty shortlist — running decision pass on full watchlist (%d symbols)",
-            len(watchlist),
+            "Screening returned empty shortlist — running decision pass on the "
+            "un-held watchlist (%d symbols)",
+            len(screening_universe),
         )
         used_fallback = True
-        shortlist = list(watchlist)
+        shortlist = list(screening_universe)
     else:
         shortlist = [e.symbol for e in screening_result.shortlist]
     logger.info("Decision pass on shortlist (%d symbols): %s", len(shortlist), shortlist)
