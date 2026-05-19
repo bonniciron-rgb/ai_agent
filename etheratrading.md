@@ -199,7 +199,8 @@ So the *deliverable, honest* product is currently "**a low-beta equity sleeve**"
 **PR (draft)**
 
 Made the agent a full buy-AND-sell trader. Previously it only found entries;
-existing positions had no exit logic. Posture: slow, steady profits.
+existing positions had no exit logic. Posture: active, fast turnover —
+booking many small gains for steady cumulative profit.
 
 - **`portfolio_snapshot.py`** — `_load_from_t212` now also captures per-symbol
   share quantities (so a SELL can be sized).

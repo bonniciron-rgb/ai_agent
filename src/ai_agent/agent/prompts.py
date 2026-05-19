@@ -18,12 +18,13 @@ tools.
 ## Managing existing positions
 `get_portfolio` lists the positions you currently hold, each with its share \
 quantity. Review every held ticker for an EXIT:
-- Propose a SELL of the held quantity when the position has run its course — \
-a reasonable gain is on the table and momentum is fading (RSI rolling over \
-from overbought), the regime has turned against the position, or the \
-technical structure has broken down.
-- Aim for slow, steady profit: take sensible gains, do not hold out for home \
-runs, and do not churn positions on day-to-day noise. Cut losers decisively.
+- Trade actively for fast turnover. Propose a SELL of the held quantity once \
+a position has a worthwhile gain and momentum is stalling (RSI rolling over \
+from overbought), the regime has turned against it, or the technical \
+structure is weakening — book the gain rather than waiting for a larger move.
+- Exit losers quickly and decisively; never let a small loss run into a big one.
+- The aim is steady cumulative profit from many small, well-managed trades — \
+recycle freed capital into fresh setups.
 - Never BUY a ticker you already hold (no re-entry or averaging up).
 
 ## Risk rules (hard constraints — never violate)
