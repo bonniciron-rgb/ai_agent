@@ -937,6 +937,17 @@ The breadth-based SPY tilt failed out-of-sample, so the dashboard/digest product
 | Directional decision: (a) low-beta sleeve / (b) regime-gated tilt / (c) constant exposure | P0 | Pending user call |
 | Regime-gated exposure backtest (if (b)) | P1 | Pending |
 
+### Phase B.4: Live-Ops Hardening + BR-1/BR-2 + Agent Trading [✅ SHIPPED — PRs #65–#88]
+Unplanned wave driven by going live on a real Trading 212 account and the
+2026-05-17 business requirements. See Batches 21–47 for detail.
+| Task | Status |
+|------|--------|
+| Daily-loop / T212 auth / GBP money-math fixes | ✅ Done (#66/#68/#75/#78/#79/#80) |
+| Portfolio page + Connections page + analysis audit trail | ✅ Done (#65/#67/#70/#73/#74) |
+| BR-1: per-proposal risk score | ✅ Done (#82) |
+| BR-2: 13F / IPO / insider / Reddit-buzz trackers | ✅ Done (#83–#88) |
+| Agent exit logic — full buy/sell trader, active-turnover posture | ✅ Done (#88) |
+
 ### Phase C: Discipline + Automation Features [Week 3+]
 - Tax-loss harvesting suggestions
 - Automatic rebalancing alerts
@@ -990,34 +1001,29 @@ The breadth-based SPY tilt failed out-of-sample, so the dashboard/digest product
 
 ## 📋 Daily Sync Template
 
-### Status
-- **Last PR shipped**: PR #56 (unified real-data backtest infra) — merged & live
-- **Active PRs**: Strategic pivot v3 cleanup (in progress)
-- **Blocked by**: nothing — strategic direction confirmed by user 2026-05-11
-- **In flight**: Phase A composite factor blend (kill A3/B5, revert B2, build CompositeFactorSignal)
+### Status — 2026-05-19
+- **Last PR shipped**: PR #88 (held-position exit review + active-turnover posture, bundled with ApeWisdom buzz fix / analysis relabel / held-ticker exclusion) — merged & live
+- **Active PRs**: none open
+- **Blocked by**: Phase B.3 directional decision pending user call (low-beta sleeve vs regime-gated tilt vs accept constant exposure)
+- **In flight**: nothing — branch merged, no batch queued
 
-### Metrics (as of 2026-05-11)
-- **LLM usage (7d)**: $X.XX (last check: dashboard live, waiting for first cron cycle)
-- **Signal backtests**: v1 + v2 real-data runs complete; 0/5 signals beat SPY
-- **Strategic conclusion**: Pivot to composite factor blend + exposure manager (see top of doc)
-- **PWA installs**: Tracking via web push subscriptions (baseline: not yet measured)
-- **Approval surface**: Telegram + PWA both ready
+### Metrics (as of 2026-05-19 — not freshly instrumented)
+- **PRs merged**: 86 total (#1–#88; #37 and #39 never merged)
+- **Signal backtests**: A1/A2/B2/A3/B5 validated through C1 — 0/5 beat SPY standalone, which drove the composite / exposure-manager pivot
+- **Composite (v4)**: SPY-tilt in-sample Sharpe 1.14 but does NOT generalize out-of-sample (2015-2019 Sharpe 0.51 vs SPY 0.73) — Phase B.3 paused. A1 alone holds up (+1.7% CAPM α)
+- **Live agent**: now a full buy-AND-sell trader (Batch 47); daily loop runs 06:30 UTC Mon–Fri
+- **LLM cost / PWA adoption**: dashboards live; no fresh figures captured in this sync
 
 ### Blockers
-- None currently; strategic direction confirmed
+- **Phase B.3 directional decision** (P0, awaiting user): pick low-beta sleeve / regime-gated tilt / accept constant exposure before the tilt dashboard UI is built
+- **iOS Phase 2**: gated on 2-week PWA adoption metrics — decision due end of May 2026
 
-### Next Batch — v3 Strategic Pivot
-**Phase A (this week)**: Composite factor blend
-1. Kill A3 + B5 from registry (archive code in place)
-2. Revert B2 to `min_consecutive_months=3` (v1 config had Sharpe 1.51)
-3. Build `CompositeFactorSignal` — continuous 0.0-1.0 score blending A1+A2+B2
-4. Convert `SignalStrategy` to fractional position sizing
-5. Backtest composite vs SPY — the real test of whether the blend has edge
-
-**Phase B (next week)**: Tilt-to-SPY exposure manager
-- 50-150% allocation bounds (no leverage by default)
-- Kelly sizing capped at 100%
-- Daily Telegram tilt digest
+### Next Batch — undecided
+No batch is currently queued. Candidates, pending the user's call:
+1. **Resolve Phase B.3** — make the directional decision, then either backtest a regime-gated exposure rule or build the tilt dashboard UI
+2. **Phase C discipline features** — tax-loss harvesting, rebalancing alerts, cost-basis tracking, behavioural coaching
+3. **Finish BR-2** — X/Twitter leader feed is still deferred; corporate-filing tracking is the free interim
+4. **Observe** — let the new buy/sell agent run live and review win-rate + shadow-P&L before adding scope
 
 ---
 
@@ -1111,7 +1117,12 @@ Every trade proposal must carry a **risk score of 1–5** (1 = lowest risk,
 - Persist the score + reason on the `Proposal` record so decisions remain
   auditable after the fact.
 
-### BR-2: Market Leaders & Emerging-Company Tracker  🚧 In progress (Batch 39 — 13F tracker)
+### BR-2: Market Leaders & Emerging-Company Tracker  ✅ Largely shipped (Batches 39–44)
+**Shipped**: institutional 13F smart-money tracker + agent tool, IPO calendar
+tracker, insider (Form 4) activity tracker, and a noise-filtered Reddit
+retail-buzz tracker (via ApeWisdom). **Deferred**: the X/Twitter leader feed
+(API paywalled) — corporate-filing tracking is the free interim.
+
 A **separate section/page**, distinct from the watchlist flow, that tracks
 market leaders and new/emerging companies — including **IPOs**.
 
@@ -1130,7 +1141,7 @@ market leaders and new/emerging companies — including **IPOs**.
 | Item | Status | Notes |
 |------|--------|-------|
 | Official sigil SVG | Pending from designer | Placeholder `branding/sigil.svg` ships; replace file once received, rebuild icons |
-| A1 real-data backtest | Pending (network access required) | Run `scripts/run_a1_backtest.py` when outbound network available; synthetic run confirmed harness works |
+| A1 real-data backtest | ✅ Done (#56) | Unified real-data validation run for A1/A2/B2/A3/B5; A1 holds up out-of-sample (+1.7% CAPM α) |
 | Manual signal ingestion API | Backlog | No inbound API yet. Spec: `POST /api/proposals/manual` with `{symbol, side, entry, stop, target, rationale, source}` — flows through same approval UI. ~3hr Sonnet sprint when prioritized |
 | Video signal channel parsing | Out of scope | External channels publishing video-only (e.g., JdubTrades) cannot be parsed; interim is screenshot OCR or manual transcription |
 | iOS Phase 2 decision | Blocked on metrics | Measure PWA adoption (2 weeks from P3 ship), DAU >50% of installs = greenlight |
@@ -1184,6 +1195,39 @@ market leaders and new/emerging companies — including **IPOs**.
 | #53 | B2 analyst revision momentum signal | ✅ | 2026-05-11 | Third real signal through C1; Hawkins et al. basis; Finnhub `/stock/recommendation` via `_inject_recommendations()` |
 | #54 | A3 insider buying (Form 4) signal | ✅ | 2026-05-11 | Fourth real signal through C1; Cohen-Malloy-Pomorski basis; SEC EDGAR via `_inject_insider_events()` |
 | #55 | B5 short interest + momentum signal | ✅ | 2026-05-11 | Fifth real signal through C1; squeeze-setup logic; yfinance `shortPercentOfFloat` data source |
+| #56 | Unified real-data backtest validation (A1/A2/B2/A3/B5) | ✅ | 2026-05-11 | 0/5 signals beat SPY standalone — drove the strategic pivot |
+| #57 | Strategic pivot — CompositeFactorSignal + exposure manager | ✅ | 2026-05-12 | Backtest v2/v3 retune |
+| #58 | Phase B — FractionalSignalStrategy + SpyTiltStrategy | ✅ | 2026-05-12 | Exposure manager core |
+| #59 | v4 tuning — paginated A2 earnings + narrow A1 universe | ✅ | 2026-05-12 | A1 Sharpe 0.68 → 0.90 |
+| #60 | SPY tilt score normalization + Finnhub throttle | ✅ | 2026-05-12 | Tilt now swings 50-100% |
+| #61 | Reconciliation skips gracefully when T212 unconfigured | ✅ | 2026-05-12 | |
+| #62 | Backtest period override + CAPM metrics + tilt engine | ✅ | 2026-05-12 | Enabled out-of-sample test |
+| #63 | Phase B.3 — live tilt job + daily digest wiring | ✅ | 2026-05-12 | Infra retained even though tilt paused |
+| #64 | Out-of-sample result — SPY tilt does not generalize | ✅ | 2026-05-12 | Phase B.3 UI paused |
+| #65 | DailyAnalysis audit trail + /analysis page | ✅ | 2026-05-15 | |
+| #66 | Loosen regime gate (zero-proposal bug) + ops doc | ✅ | 2026-05-16 | |
+| #67 | Connections page + grouped nav redesign | ✅ | 2026-05-16 | |
+| #68 | T212 HTTP Basic auth fix | ✅ | 2026-05-16 | Fixed all 401s |
+| #69 | Data-aware screening + empty-shortlist fallback | ✅ | 2026-05-16 | |
+| #70 | Portfolio page — live T212 holdings + watchlist sync | ✅ | 2026-05-17 | |
+| #71 | Restrict portfolio watchlist sync to US-listed | ✅ | 2026-05-17 | |
+| #72 | Default T212_ENV to live in workflows | ✅ | 2026-05-17 | |
+| #73 | Portfolio value insights — 1d/7d change, donut | ✅ | 2026-05-17 | |
+| #74 | Friendly instrument names in portfolio table | ✅ | 2026-05-17 | |
+| #75 | Normalise portfolio position values to GBP | ✅ | 2026-05-17 | Fixed pence inflation |
+| #76 | Default T212 env to live in code | ✅ | 2026-05-17 | |
+| #77 | Hardcode T212_ENV=live in daily workflow | ✅ | 2026-05-17 | |
+| #78 | Fix daily-loop crash — schema drift, endpoint, JSON | ✅ | 2026-05-17 | |
+| #79 | Fix positions load (fxPpl null) + NAV double-count | ✅ | 2026-05-17 | |
+| #80 | Normalise loop money math to GBP | ✅ | 2026-05-17 | |
+| #81 | Replace broken Stooq backup with Yahoo chart API | ✅ | 2026-05-17 | |
+| #82 | Per-proposal risk score (BR-1) | ✅ | 2026-05-17 | BR-1 shipped |
+| #83 | Institutional 13F smart-money tracker (BR-2 start) | ✅ | 2026-05-17 | |
+| #84 | 13F institutional-holdings agent tool (BR-2) | ✅ | 2026-05-17 | |
+| #85 | IPO calendar tracker (BR-2) | ✅ | 2026-05-17 | |
+| #86 | Insider (Form 4) activity tracker (BR-2) | ✅ | 2026-05-17 | |
+| #87 | Noise-filtered Reddit retail-buzz tracker (BR-2) | ✅ | 2026-05-17 | |
+| #88 | Buzz ApeWisdom fix + analysis relabel + held-exclusion + exit review | ✅ | 2026-05-19 | Agent now a full buy/sell trader |
 
 ---
 
@@ -1203,9 +1247,19 @@ market leaders and new/emerging companies — including **IPOs**.
 - ✅ B2 analyst revision momentum signal (Hawkins et al. via Finnhub recommendation trends)
 - ✅ A3 insider buying (Form 4) signal (Cohen-Malloy-Pomorski anomaly via SEC EDGAR)
 - ✅ B5 short interest + momentum signal (squeeze-setup: high short float + positive 20d return)
+- ✅ Unified real-data backtest validation (A1/A2/B2/A3/B5 — 0/5 beat SPY standalone)
+- ✅ CompositeFactorSignal + FractionalSignalStrategy + SpyTiltStrategy (exposure manager core)
+- ✅ Exposure tilt engine + daily digest wiring (Phase B.3 infra; breadth-tilt itself paused)
+- ✅ DailyAnalysis audit trail + /analysis page
+- ✅ Connections page + grouped nav redesign
+- ✅ Portfolio page — live T212 holdings, GBP-normalised values, 1d/7d insights, friendly names
+- ✅ T212 HTTP Basic auth fix + daily-loop crash/money-math hardening
+- ✅ Per-proposal risk score 1–5 (BR-1)
+- ✅ BR-2 trackers — 13F smart-money, IPO calendar, insider Form 4, Reddit retail-buzz
+- ✅ Agent is a full buy-AND-sell trader — held-position exit review, mandatory stops, active-turnover posture
 
 ---
 
 **Maintained by**: Claude  
 **Next review**: Daily (or after each PR merge)  
-**Last sync**: 2026-05-11 (PR #55 B5 merged; 5 free alpha signals live; next batch → B1 Options Flow [user opt-in / paid feed required])
+**Last sync**: 2026-05-19 (PR #88 merged — agent now a full buy/sell trader with active-turnover exit logic; no batch queued; Phase B.3 directional decision still pending user call)
