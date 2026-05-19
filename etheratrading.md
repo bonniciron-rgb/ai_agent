@@ -195,6 +195,26 @@ So the *deliverable, honest* product is currently "**a low-beta equity sleeve**"
 
 ---
 
+### Batch 48: Silence false-positive reconciliation drift [2026-05-19]
+**PR (draft)**
+
+Nightly reconciliation alerted "drift detected" every run — e.g. 20 position
+mismatches — even though trading was healthy. Root cause: nothing writes to
+the `Position` DB table, so reconciliation compared live T212 holdings against
+an always-empty table and flagged every holding as `position_missing_in_db`.
+
+- **`reconciliation.py`** — `run_reconciliation` skips the position comparison
+  when the `Position` table is empty (records a `position_check_skipped` note
+  instead) and resumes automatically once position tracking is wired up. Order
+  reconciliation is unchanged.
+- **`tests/test_reconciliation.py`** — covers the skip path.
+
+Follow-up: proper position reconciliation needs the `Position` table populated
+(e.g. on order fill) and scoped to agent-managed symbols, so a user's
+pre-existing portfolio isn't treated as drift.
+
+---
+
 ### Batch 47: Held-position exit review + mandatory stops [2026-05-17]
 **PR (draft)**
 
@@ -1262,4 +1282,4 @@ market leaders and new/emerging companies — including **IPOs**.
 
 **Maintained by**: Claude  
 **Next review**: Daily (or after each PR merge)  
-**Last sync**: 2026-05-19 (PR #88 merged — agent now a full buy/sell trader with active-turnover exit logic; no batch queued; Phase B.3 directional decision still pending user call)
+**Last sync**: 2026-05-19 (PR #88 merged; Batch 48 silenced a false-positive nightly reconciliation alert; Phase B.3 directional decision still pending user call)

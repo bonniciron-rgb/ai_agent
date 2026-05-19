@@ -282,6 +282,31 @@ def test_reconciliation_drift_scenario(engine: Engine) -> None:
     assert "order_submitted_in_db_not_found_at_t212" in drift_types
 
 
+def test_reconciliation_skips_position_check_when_db_unpopulated(engine: Engine) -> None:
+    """Empty Position table → position check skipped, no false-positive drift.
+
+    Nothing populates the Position table yet, so comparing it against live
+    T212 holdings would flag every real holding as drift. The check is skipped
+    until position tracking is wired up.
+    """
+    t212_client = _make_mock_t212(
+        positions=[
+            _make_t212_position("AAPL_US_EQ", "5"),
+            _make_t212_position("MSFT_US_EQ", "10"),
+        ],
+        orders=[],
+    )
+
+    row = run_reconciliation(t212_client=t212_client, engine=engine)
+
+    assert row.status == "ok"
+    assert row.position_drifts == 0
+    assert row.order_drifts == 0
+
+    details = json.loads(row.details or "[]")
+    assert any(d["type"] == "position_check_skipped" for d in details)
+
+
 def test_reconciliation_error_scenario(engine: Engine) -> None:
     """If T212 call raises, status should be 'error' and it should still write to DB."""
     mock = MagicMock()
