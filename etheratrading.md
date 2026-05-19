@@ -195,6 +195,30 @@ So the *deliverable, honest* product is currently "**a low-beta equity sleeve**"
 
 ---
 
+### Batch 47: Held-position exit review + mandatory stops [2026-05-17]
+**PR (draft)**
+
+Made the agent a full buy-AND-sell trader. Previously it only found entries;
+existing positions had no exit logic. Posture: slow, steady profits.
+
+- **`portfolio_snapshot.py`** — `_load_from_t212` now also captures per-symbol
+  share quantities (so a SELL can be sized).
+- **`daily_loop.py`** — `get_portfolio` returns each position's quantity +
+  GBP value, keyed by plain symbol.
+- **`agent/runner.py`** — held tickers, excluded from buy-screening (Batch 46),
+  now rejoin the *decision* pass so the agent reviews them for an exit.
+- **`agent/prompts.py`** — new "Managing existing positions" section: propose
+  a SELL when a position has run its course (profit fading, regime turned,
+  structure broken); take steady gains, don't churn, cut losers. Stop rule
+  hardened: every buy must carry a stop.
+- **`risk/rails.py`** — a buy with no `stop_price` is now rejected.
+- **`agent/tools.py`** — tool descriptions updated to match.
+
+Known limit: exit review only covers holdings with price data — US stocks,
+not the London ETFs (no working data feed for those tickers).
+
+---
+
 ### Batch 46: Exclude already-held tickers from screening [2026-05-17]
 **PR (draft)**
 

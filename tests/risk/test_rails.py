@@ -269,6 +269,19 @@ def test_risk_checker_valid_stop_passes() -> None:
     assert result.allowed
 
 
+def test_buy_without_stop_price_is_rejected() -> None:
+    checker = RiskChecker(portfolio=make_portfolio())
+    result = checker.check(
+        symbol="AAPL",
+        side="buy",
+        quantity=1,
+        limit_price=Decimal("100"),
+        stop_price=None,
+    )
+    assert not result.allowed
+    assert "stop" in result.reason.lower()
+
+
 def test_risk_checker_converts_usd_notional_to_gbp() -> None:
     # 100 shares @ $100 = $10,000 — over the 5% (5,000) cap of a 100k GBP NAV
     # at face value, but 0.4 * 10,000 = 4,000 GBP once converted, so it passes.

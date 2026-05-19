@@ -236,6 +236,8 @@ class RiskChecker:
         order_notional = limit_price * quantity * self.usd_to_gbp
 
         if side.lower() == "buy":
+            if stop_price is None:
+                return _fail(f"{symbol}: every buy must define a stop_price")
             for result in (
                 check_position_cap(symbol, order_notional, self.portfolio),
                 check_atr_stop(symbol, limit_price, stop_price, self.portfolio),

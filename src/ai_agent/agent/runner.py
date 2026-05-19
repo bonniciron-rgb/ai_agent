@@ -352,10 +352,20 @@ def _run_tiered(
         shortlist = list(screening_universe)
     else:
         shortlist = [e.symbol for e in screening_result.shortlist]
-    logger.info("Decision pass on shortlist (%d symbols): %s", len(shortlist), shortlist)
+
+    # Held positions rejoin here: they are excluded from screening (buy-side
+    # only) but the decision pass must still review them for an EXIT.
+    review = [s for s in sorted(held) if s.upper() not in {x.upper() for x in shortlist}]
+    decision_universe = shortlist + review
+    logger.info(
+        "Decision pass: %d new candidate(s) + %d held for exit review: %s",
+        len(shortlist),
+        len(review),
+        decision_universe,
+    )
 
     decision = _run_decision_pass(
-        shortlist=shortlist,
+        shortlist=decision_universe,
         toolbox=toolbox,
         client=client,
         model=decision_model,

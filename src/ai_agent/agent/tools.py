@@ -58,9 +58,9 @@ TOOL_SCHEMAS: list[dict] = [
     {
         "name": "get_portfolio",
         "description": (
-            "Return current portfolio: cash balance, list of open positions "
-            "(symbol, quantity, average cost, current price, unrealised P&L). "
-            "Call this once at the start of your analysis."
+            "Return current portfolio: NAV and open positions, each with its "
+            "share quantity and GBP market value. Call this once at the start; "
+            "use it to size SELLs of held positions and to avoid re-buying them."
         ),
         "input_schema": {
             "type": "object",
@@ -128,7 +128,10 @@ TOOL_SCHEMAS: list[dict] = [
                 },
                 "stop_price": {
                     "type": "number",
-                    "description": "Stop-loss price (optional but strongly recommended)",
+                    "description": (
+                        "Stop-loss price. Required for buy proposals — a buy "
+                        "with no stop_price is rejected by the risk rails."
+                    ),
                 },
                 "rationale": {
                     "type": "string",

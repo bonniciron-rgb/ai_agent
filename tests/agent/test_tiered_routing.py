@@ -511,8 +511,9 @@ def test_held_symbols_strips_venue_suffix() -> None:
     assert _held_symbols(_simple_toolbox()) == set()
 
 
-def test_screening_excludes_held_tickers() -> None:
-    """A watchlist symbol that is already held must be dropped before screening."""
+def test_held_ticker_excluded_from_screening_but_reviewed_in_decision() -> None:
+    """A held watchlist symbol is dropped from screening (buy-side) but still
+    reaches the decision pass — where it is reviewed for an exit."""
     client = RecordingClient(
         responses=[
             _screening_response([]),  # empty shortlist → fallback to un-held universe
@@ -530,7 +531,14 @@ def test_screening_excludes_held_tickers() -> None:
     )
 
     assert result.stop_reason == "screening_empty_fallback"
-    decision_user_msg = client.calls[1]["messages"][0]["content"]
-    assert "AAA" in decision_user_msg
-    assert "CCC" in decision_user_msg
-    assert "BBB" not in decision_user_msg
+
+    # Screening (buy-side) must not see the held ticker.
+    screening_msg = client.calls[0]["messages"][0]["content"]
+    assert "AAA" in screening_msg
+    assert "BBB" not in screening_msg
+
+    # The decision pass still reviews the held ticker, for a possible exit.
+    decision_msg = client.calls[1]["messages"][0]["content"]
+    assert "AAA" in decision_msg
+    assert "CCC" in decision_msg
+    assert "BBB" in decision_msg
