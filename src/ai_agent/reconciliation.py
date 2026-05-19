@@ -238,13 +238,28 @@ def run_reconciliation(
 
     try:
         # --- Positions ---
+        # Nothing populates the Position table yet, so a comparison would flag
+        # every real T212 holding as drift. Only run the position check when
+        # the table has rows; it resumes automatically once position tracking
+        # is wired up.
         t212_positions = t212_client.get_positions()
         with Session(eng) as session:
             db_positions = list(session.exec(select(Position)).all())
 
-        pos_drifts = compare_positions(db_positions, t212_positions)
-        position_drifts = len(pos_drifts)
-        details_list.extend(pos_drifts)
+        if db_positions:
+            pos_drifts = compare_positions(db_positions, t212_positions)
+            position_drifts = len(pos_drifts)
+            details_list.extend(pos_drifts)
+        else:
+            details_list.append(
+                {
+                    "type": "position_check_skipped",
+                    "message": (
+                        "Position table not populated — position reconciliation "
+                        "skipped pending position tracking"
+                    ),
+                }
+            )
 
         # --- Orders ---
         # T212 get_orders() returns active (non-terminal) orders.
