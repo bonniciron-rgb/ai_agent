@@ -123,10 +123,16 @@ def _build_toolbox(
             return []
 
     def get_portfolio(inputs: dict) -> dict:
-        return {
-            "nav": str(portfolio_snapshot.nav),
-            "positions": {sym: str(val) for sym, val in portfolio_snapshot._positions.items()},
-        }
+        # Keyed by plain symbol; each entry carries share quantity (to size a
+        # SELL when reviewing a held position) and GBP market value.
+        positions: dict[str, dict[str, str]] = {}
+        for ticker, value in portfolio_snapshot._positions.items():
+            plain = ticker.split("_")[0].upper()
+            positions[plain] = {
+                "quantity": str(portfolio_snapshot._quantities.get(ticker, Decimal("0"))),
+                "value_gbp": str(value),
+            }
+        return {"nav": str(portfolio_snapshot.nav), "positions": positions}
 
     def propose_trade(inputs: dict):
         from ai_agent.agent.proposals import TradeProposal

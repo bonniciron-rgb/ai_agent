@@ -195,6 +195,79 @@ So the *deliverable, honest* product is currently "**a low-beta equity sleeve**"
 
 ---
 
+### Batch 47: Held-position exit review + mandatory stops [2026-05-17]
+**PR (draft)**
+
+Made the agent a full buy-AND-sell trader. Previously it only found entries;
+existing positions had no exit logic. Posture: active, fast turnover —
+booking many small gains for steady cumulative profit.
+
+- **`portfolio_snapshot.py`** — `_load_from_t212` now also captures per-symbol
+  share quantities (so a SELL can be sized).
+- **`daily_loop.py`** — `get_portfolio` returns each position's quantity +
+  GBP value, keyed by plain symbol.
+- **`agent/runner.py`** — held tickers, excluded from buy-screening (Batch 46),
+  now rejoin the *decision* pass so the agent reviews them for an exit.
+- **`agent/prompts.py`** — new "Managing existing positions" section: propose
+  a SELL when a position has run its course (profit fading, regime turned,
+  structure broken); take steady gains, don't churn, cut losers. Stop rule
+  hardened: every buy must carry a stop.
+- **`risk/rails.py`** — a buy with no `stop_price` is now rejected.
+- **`agent/tools.py`** — tool descriptions updated to match.
+
+Known limit: exit review only covers holdings with price data — US stocks,
+not the London ETFs (no working data feed for those tickers).
+
+---
+
+### Batch 46: Exclude already-held tickers from screening [2026-05-17]
+**PR (draft)**
+
+The agent's no-re-entry rule (don't buy what you already hold) was applied in
+the *decision* pass — *after* screening had already spent shortlist slots on
+held names. On a recent run 4 of 5 shortlisted names were held, leaving the
+Opus decision pass just 1 genuine new candidate → "no trade".
+
+- **`agent/runner.py`** — `_run_tiered` now drops already-held tickers from
+  the screening universe up front (`_held_symbols()` reads the portfolio,
+  strips the T212 venue suffix). The empty-shortlist fallback uses the
+  un-held universe too. So all shortlist slots go to real new candidates.
+- **`tests/agent/test_tiered_routing.py`** — covers suffix-stripping and
+  held-ticker exclusion.
+
+Note: held names are still skipped for *buys* by the prompt rule; active
+exit-management of held positions would be a separate dedicated pass.
+
+---
+
+### Batch 45: Fix — relabel "considered" → "proposed" on analysis card [2026-05-17]
+**PR (draft)**
+
+The "Today's analysis" card showed `{proposals_generated} considered`, which
+read as "symbols considered" — alarming as "0 considered" when the agent
+simply generated no proposals (its normal no-trade outcome). `proposals_`
+`generated` is the count of proposals the agent *produced*, not symbols
+analysed. Relabelled to "proposed" on `app/proposals/page.tsx` and
+`app/analysis/AnalysisClient.tsx`. UI-only; no behaviour change.
+
+---
+
+### Batch 44: Fix — buzz tracker via ApeWisdom (Reddit blocks Vercel) [2026-05-17]
+**PR (draft)**
+
+Reddit blocks unauthenticated `.json` requests from datacenter IPs, so the
+Batch 43 `/buzz` page showed "Reddit is unreachable" on Vercel.
+
+- **`lib/buzz.ts`** (new, replaces `lib/reddit.ts`) — sources buzz from
+  ApeWisdom (apewisdom.io), a keyless Reddit-mention aggregator that works
+  from any IP. Its 24h-ago counts enable a real **momentum** filter:
+  tickers are classed rising / steady / fading by mention acceleration,
+  ranked by engagement-weighted buzz, low-traction names dropped.
+- **`app/buzz/page.tsx`** — adds a "vs 24h" momentum column + Trend badge;
+  the "Accelerating" callout flags sharply-rising buzz.
+
+---
+
 ### Batch 43: BR-2 — Reddit retail-buzz tracker (noise-filtered) [2026-05-17]
 **PR (draft)**
 

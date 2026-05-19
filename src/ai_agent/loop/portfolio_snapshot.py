@@ -34,7 +34,12 @@ class LivePortfolioSnapshot:
     ) -> None:
         self._sectors = watchlist_sectors or {}
         self._ref_date = reference_date or datetime.now(UTC).date()
-        self._nav, self._positions, self._db_sectors = self._load_from_t212(t212_client)
+        (
+            self._nav,
+            self._positions,
+            self._quantities,
+            self._db_sectors,
+        ) = self._load_from_t212(t212_client)
 
     # ------------------------------------------------------------------
     # PortfolioSnapshot protocol
@@ -117,8 +122,14 @@ class LivePortfolioSnapshot:
     # Helpers
     # ------------------------------------------------------------------
 
-    def _load_from_t212(self, client) -> tuple[Decimal, dict[str, Decimal], dict[str, str]]:
-        """Load cash + positions from T212; return (nav, position_values, db_sectors)."""
+    def _load_from_t212(
+        self, client
+    ) -> tuple[Decimal, dict[str, Decimal], dict[str, Decimal], dict[str, str]]:
+        """Load cash + positions from T212.
+
+        Returns (nav, position_values_gbp, position_quantities, db_sectors).
+        Quantities let the agent size a SELL when reviewing held positions.
+        """
         nav = Decimal("0")
         try:
             cash_info = client.get_cash()
@@ -130,6 +141,7 @@ class LivePortfolioSnapshot:
             logger.exception("Failed to fetch T212 cash")
 
         position_values: dict[str, Decimal] = {}
+        position_quantities: dict[str, Decimal] = {}
         db_sectors: dict[str, str] = {}
 
         try:
@@ -148,6 +160,7 @@ class LivePortfolioSnapshot:
             for pos in positions:
                 price = to_gbp(pos.current_price, currencies.get(pos.ticker, ""), fx_rates)
                 position_values[pos.ticker.upper()] = price * pos.quantity
+                position_quantities[pos.ticker.upper()] = pos.quantity
         except Exception:
             logger.exception("Failed to fetch T212 positions")
 
@@ -158,7 +171,7 @@ class LivePortfolioSnapshot:
                 if p.sector:
                     db_sectors[p.symbol.upper()] = p.sector
 
-        return nav, position_values, db_sectors
+        return nav, position_values, position_quantities, db_sectors
 
 
 def _trading_days_between(start: date, end: date) -> int:
