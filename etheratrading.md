@@ -195,6 +195,28 @@ So the *deliverable, honest* product is currently "**a low-beta equity sleeve**"
 
 ---
 
+### Batch 49: Fix exits blocked by the entry-stop risk rail [2026-05-21]
+**PR (draft)**
+
+The agent had produced zero actionable trades for days despite a volatile
+market. Root cause: Batch 47 made it a buy-AND-sell trader and its prompt
+tells it to omit the stop when fully exiting a position — but the SELL path
+in `risk/rails.py` still ran `check_atr_stop`, which rejects any order with
+no `stop_price`. Every full-exit SELL the agent generated was blocked by the
+risk rails before reaching the user.
+
+- **`risk/rails.py`** — the sell/exit path no longer runs the ATR-stop check.
+  A stop is an entry-side control; an exit is not gated by one. Sells now
+  only check the daily-turnover cap.
+- **`tests/risk/test_rails.py`** — added a stopless-exit test; corrected a
+  stale comment.
+
+Note: buy proposals are also thin because the watchlist is only 14 names and
+the held-ticker exclusion (Batch 46) removes any already held — worth
+expanding the watchlist with un-held candidates.
+
+---
+
 ### Batch 48: Silence false-positive reconciliation drift [2026-05-19]
 **PR (draft)**
 
@@ -1282,4 +1304,4 @@ market leaders and new/emerging companies — including **IPOs**.
 
 **Maintained by**: Claude  
 **Next review**: Daily (or after each PR merge)  
-**Last sync**: 2026-05-19 (PR #88 merged; Batch 48 silenced a false-positive nightly reconciliation alert; Phase B.3 directional decision still pending user call)
+**Last sync**: 2026-05-21 (Batch 49 fixed exit proposals being blocked by the entry-stop risk rail; watchlist size is limiting new buys; Phase B.3 directional decision still pending user call)

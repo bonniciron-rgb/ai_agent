@@ -249,14 +249,14 @@ class RiskChecker:
                     return result
                 if result.reason:  # allowed but has advisory text
                     self.warnings.append(result.reason)
-        else:  # sell — only turnover + cooldown (cooldown doesn't apply to sells)
-            for result in (
-                check_atr_stop(symbol, limit_price, stop_price, self.portfolio),
-                check_daily_turnover(order_notional, self.portfolio),
-            ):
-                if not result.allowed:
-                    return result
-                if result.reason:
-                    self.warnings.append(result.reason)
+        else:  # sell (exit)
+            # A stop is an entry-side control; an exit is not gated by one. The
+            # agent omits stop_price on full exits by design (see prompts.py),
+            # so only the daily-turnover cap applies here.
+            turnover = check_daily_turnover(order_notional, self.portfolio)
+            if not turnover.allowed:
+                return turnover
+            if turnover.reason:
+                self.warnings.append(turnover.reason)
 
         return PASS
