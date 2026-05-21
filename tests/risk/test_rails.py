@@ -330,8 +330,22 @@ def test_risk_checker_halt_flag_can_be_toggled() -> None:
     assert result.allowed
 
 
+def test_risk_checker_sell_allowed_without_stop() -> None:
+    # A full exit omits stop_price by design (prompts.py: "omit it when fully
+    # exiting a position"). The rail must not reject an exit for lacking a stop.
+    checker = RiskChecker(portfolio=portfolio(atr_map={"AAPL": Decimal("2")}))
+    result = checker.check(
+        symbol="AAPL",
+        side="sell",
+        quantity=10,
+        limit_price=Decimal("150"),
+        stop_price=None,
+    )
+    assert result.allowed
+
+
 def test_risk_checker_sell_skips_position_and_sector_caps() -> None:
-    # Even if position/sector caps would fire, a sell should only check ATR stop + turnover
+    # Even if position/sector caps would fire, a sell skips them — only turnover applies.
     p = FakePortfolio(
         nav=NAV,
         positions={"AAPL": Decimal("99_000")},  # way over cap but it's a sell
