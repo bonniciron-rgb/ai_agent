@@ -121,7 +121,15 @@ TOOL_SCHEMAS: list[dict] = [
             "properties": {
                 "symbol": {"type": "string"},
                 "side": {"type": "string", "enum": ["buy", "sell"]},
-                "quantity": {"type": "integer", "minimum": 1},
+                "quantity": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "description": (
+                        "Number of shares. May be fractional — when fully "
+                        "exiting a position, use the exact held quantity "
+                        "(e.g. 0.8), not a rounded whole number."
+                    ),
+                },
                 "limit_price": {
                     "type": "number",
                     "description": "Limit order price in account currency",

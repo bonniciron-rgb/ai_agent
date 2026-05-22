@@ -195,8 +195,38 @@ So the *deliverable, honest* product is currently "**a low-beta equity sleeve**"
 
 ---
 
-### Batch 49: Fix exits blocked by the entry-stop risk rail [2026-05-21]
+### Batch 50: Support fractional share quantities in proposals [2026-05-21]
 **PR (draft)**
+
+A user flagged a SELL proposal showing "SELL 1 share" of NVDD when only 0.8
+shares were held — the rationale text correctly said "exit the full
+0.8-share position", but the header and stored quantity were `1`. Root
+cause: the agent layer truncated all quantities to whole numbers. The
+`propose_trade` tool schema declared `quantity` as `integer, minimum 1`,
+`TradeProposal.quantity` was typed `int`, and `daily_loop` cast tool inputs
+with `int(...)`. The DB and broker layers already used `Decimal`, so the
+fractional amount was destroyed only in the agent layer. Approving such a
+proposal would try to sell more than is held.
+
+- **`agent/tools.py`** — `propose_trade` quantity is now `number,
+  exclusiveMinimum 0` with a description telling the agent to use the exact
+  fractional held amount on a full exit.
+- **`agent/proposals.py`** — `TradeProposal.quantity` is now `Decimal`, with
+  a validator rejecting non-positive values.
+- **`agent/prompts.py`** — instructs the agent to size SELLs from the exact
+  `get_portfolio` quantity and never round a fraction up.
+- **`loop/daily_loop.py`** — drops the `int(...)` casts; adds
+  `_clamp_sells_to_holdings`, a safety net that caps any SELL at the live
+  holding and drops a SELL for an unheld symbol (prevents overselling).
+- **`loop/portfolio_snapshot.py`** — new `held_quantity(symbol)` accessor
+  (matches on the plain ticker, ignoring the T212 venue suffix).
+- **`risk/rails.py`** / **`bot/formatting.py`** — `Decimal` quantities; the
+  Telegram card renders fractions honestly and strips trailing zeros.
+
+---
+
+### Batch 49: Fix exits blocked by the entry-stop risk rail [2026-05-21]
+**PR #90 (merged)**
 
 The agent had produced zero actionable trades for days despite a volatile
 market. Root cause: Batch 47 made it a buy-AND-sell trader and its prompt
@@ -1304,4 +1334,4 @@ market leaders and new/emerging companies — including **IPOs**.
 
 **Maintained by**: Claude  
 **Next review**: Daily (or after each PR merge)  
-**Last sync**: 2026-05-21 (Batch 49 fixed exit proposals being blocked by the entry-stop risk rail; watchlist size is limiting new buys; Phase B.3 directional decision still pending user call)
+**Last sync**: 2026-05-21 (Batch 50 added fractional-share quantities to proposals so exits sell the exact held amount; Batch 49 fixed exits blocked by the entry-stop rail, merged as PR #90; watchlist size still limiting new buys)

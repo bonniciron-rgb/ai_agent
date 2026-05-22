@@ -46,3 +46,16 @@ def test_stop_price_optional() -> None:
 def test_sell_side() -> None:
     p = TradeProposal(**_proposal(side=OrderSide.sell))
     assert p.side == OrderSide.sell
+
+
+def test_quantity_accepts_fractional() -> None:
+    # Fractional positions (e.g. 0.8 shares) must survive intact so a full
+    # exit sells exactly what is held rather than rounding up to a whole share.
+    p = TradeProposal(**_proposal(quantity=Decimal("0.8")))
+    assert p.quantity == Decimal("0.8")
+
+
+def test_quantity_rejects_zero_and_negative() -> None:
+    for bad in (0, Decimal("-1")):
+        with pytest.raises(ValueError, match="quantity"):
+            TradeProposal(**_proposal(quantity=bad))

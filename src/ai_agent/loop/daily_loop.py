@@ -140,7 +140,7 @@ def _build_toolbox(
         return TradeProposal(
             symbol=inputs["symbol"],
             side=OrderSide(inputs["side"]),
-            quantity=int(inputs["quantity"]),
+            quantity=Decimal(str(inputs["quantity"])),
             limit_price=Decimal(str(inputs["limit_price"])),
             stop_price=Decimal(str(inputs["stop_price"])) if inputs.get("stop_price") else None,
             rationale=inputs["rationale"],
@@ -269,7 +269,7 @@ def _save_proposals(
                 expires_at=expires_at,
                 symbol=p.symbol,
                 side=OrderSide(p.side),
-                quantity=Decimal(p.quantity),
+                quantity=p.quantity,
                 limit_price=p.limit_price,
                 stop_price=p.stop_price,
                 rationale=p.rationale,
@@ -375,7 +375,7 @@ async def _send_digest(
             "id": p.id,
             "symbol": p.symbol,
             "side": str(p.side),
-            "quantity": int(p.quantity),
+            "quantity": p.quantity,
             "limit_price": str(p.limit_price),
             "stop_price": str(p.stop_price) if p.stop_price else None,
             "rationale": p.rationale,
@@ -385,6 +385,40 @@ async def _send_digest(
     ]
     async with bot:
         await send_proposals(bot, chat_id, proposal_dicts, no_proposal_text=no_proposal_text)
+
+
+# ---------------------------------------------------------------------------
+# Risk helpers
+# ---------------------------------------------------------------------------
+
+
+def _clamp_sells_to_holdings(proposals: list, portfolio: LivePortfolioSnapshot) -> list:
+    """Cap every SELL at the quantity the account actually holds.
+
+    The agent sizes exits from the get_portfolio snapshot, but a rounding
+    slip or a stale snapshot could leave it proposing to sell more shares
+    than are held — which the broker would reject or turn into an
+    unintended short. Clamp any oversized SELL down to the live holding,
+    and drop a SELL for a symbol that is no longer held at all.
+    """
+    out: list = []
+    for p in proposals:
+        if p.side != OrderSide.sell:
+            out.append(p)
+            continue
+        held = portfolio.held_quantity(p.symbol)
+        if held <= 0:
+            logger.warning(
+                "Dropping SELL %s: agent proposed an exit but the account holds no shares",
+                p.symbol,
+            )
+            continue
+        if p.quantity > held:
+            logger.info("Clamping SELL %s from %s to held quantity %s", p.symbol, p.quantity, held)
+            out.append(p.model_copy(update={"quantity": held}))
+        else:
+            out.append(p)
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -481,6 +515,9 @@ def run(
         result.iterations,
     )
 
+    # Clamp exits to the real holding before they reach the risk rails.
+    proposals = _clamp_sells_to_holdings(result.proposals, portfolio)
+
     # 7. Risk filter — proposal limit prices are USD (US-listed watchlist);
     # convert notionals to GBP so they compare against the GBP NAV.
     fx_rates = get_gbp_rates()
@@ -489,7 +526,7 @@ def run(
     checker = RiskChecker(portfolio=portfolio, usd_to_gbp=usd_to_gbp)
     passing: list = []
     risk_scores: list = []  # parallel to `passing`
-    for proposal in result.proposals:
+    for proposal in proposals:
         rail = checker.check(
             symbol=proposal.symbol,
             side=str(proposal.side),
@@ -521,7 +558,7 @@ def run(
     if dry_run:
         logger.info("[dry_run] Would save %d proposals and send digest", len(passing))
         for p in passing:
-            logger.info("  %s %s x%d @ %s", p.side, p.symbol, p.quantity, p.limit_price)
+            logger.info("  %s %s x%s @ %s", p.side, p.symbol, p.quantity, p.limit_price)
         # Still write reasoning + shadow rows even in dry-run so we can audit
         if passing:
             _save_proposals(passing, agent_result=result, risk_scores=risk_scores)

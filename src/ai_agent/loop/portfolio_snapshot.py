@@ -52,6 +52,20 @@ class LivePortfolioSnapshot:
     def position_value(self, symbol: str) -> Decimal:
         return self._positions.get(symbol.upper(), Decimal("0"))
 
+    def held_quantity(self, symbol: str) -> Decimal:
+        """Total share quantity held in *symbol* (0 if not held).
+
+        T212 tickers carry a venue suffix (e.g. NVDD_US_EQ) while proposals
+        use the plain symbol, so match on the part before the first
+        underscore and sum any duplicate listings.
+        """
+        plain = symbol.split("_")[0].upper()
+        total = Decimal("0")
+        for ticker, qty in self._quantities.items():
+            if ticker.split("_")[0].upper() == plain:
+                total += qty
+        return total
+
     def sector_value(self, sector: str) -> Decimal:
         total = Decimal("0")
         for sym, val in self._positions.items():

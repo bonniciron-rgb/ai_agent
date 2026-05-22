@@ -1,5 +1,7 @@
 """Tests for Telegram message formatting helpers."""
 
+from decimal import Decimal
+
 import pytest
 
 from ai_agent.bot.formatting import (
@@ -74,6 +76,37 @@ def test_proposal_message_plural_shares() -> None:
         confidence="low",
     )
     assert "shares" in msg
+
+
+def test_proposal_message_fractional_quantity() -> None:
+    # A full exit of a fractional holding must render the real quantity.
+    msg = proposal_message(
+        proposal_id=9,
+        symbol="NVDD",
+        side="sell",
+        quantity=Decimal("0.8"),
+        limit_price="31.40",
+        stop_price=None,
+        rationale="Full exit of the position.",
+        confidence="medium",
+    )
+    assert "0.8 share" in msg
+    assert "1 share" not in msg
+
+
+def test_proposal_message_whole_quantity_has_no_trailing_zeros() -> None:
+    msg = proposal_message(
+        proposal_id=10,
+        symbol="AAPL",
+        side="sell",
+        quantity=Decimal("3.0"),
+        limit_price="180.00",
+        stop_price=None,
+        rationale=".",
+        confidence="low",
+    )
+    assert "3 shares" in msg
+    assert "3.0" not in msg
 
 
 def test_approval_keyboard_has_four_buttons() -> None:
