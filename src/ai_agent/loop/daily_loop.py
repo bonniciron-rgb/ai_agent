@@ -414,9 +414,7 @@ def _clamp_sells_to_holdings(proposals: list, portfolio: LivePortfolioSnapshot) 
             )
             continue
         if p.quantity > held:
-            logger.info(
-                "Clamping SELL %s from %s to held quantity %s", p.symbol, p.quantity, held
-            )
+            logger.info("Clamping SELL %s from %s to held quantity %s", p.symbol, p.quantity, held)
             out.append(p.model_copy(update={"quantity": held}))
         else:
             out.append(p)
