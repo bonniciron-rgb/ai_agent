@@ -263,6 +263,55 @@ def test_daily_loop_persists_analysis_when_no_proposals(watchlist_path, _db, mon
     assert "/analysis" in captured["no_proposal_text"]
 
 
+def test_clamp_sells_to_holdings() -> None:
+    """SELLs are capped at the held quantity; a SELL for an unheld symbol is dropped."""
+    from ai_agent.loop.daily_loop import _clamp_sells_to_holdings
+
+    class StubPortfolio:
+        def __init__(self, held: dict[str, Decimal]) -> None:
+            self._held = held
+
+        def held_quantity(self, symbol: str) -> Decimal:
+            return self._held.get(symbol.upper(), Decimal("0"))
+
+    def _sell(symbol: str, qty) -> TradeProposal:
+        return TradeProposal(
+            symbol=symbol,
+            side=OrderSide.sell,
+            quantity=qty,
+            limit_price=Decimal("100"),
+            rationale="Exit the position.",
+            confidence="low",
+        )
+
+    buy = TradeProposal(
+        symbol="AAPL",
+        side=OrderSide.buy,
+        quantity=Decimal("5"),
+        limit_price=Decimal("100"),
+        stop_price=Decimal("90"),
+        rationale="Fresh entry.",
+        confidence="low",
+    )
+    portfolio = StubPortfolio({"NVDD": Decimal("0.8"), "ORCL": Decimal("3.4")})
+
+    out = _clamp_sells_to_holdings(
+        [
+            buy,  # buy — left untouched
+            _sell("NVDD", Decimal("1")),  # oversized → clamp to 0.8
+            _sell("ORCL", Decimal("1")),  # within holding → unchanged
+            _sell("TSLA", Decimal("2")),  # not held → dropped
+        ],
+        portfolio,
+    )
+
+    by_symbol = {p.symbol: p for p in out}
+    assert set(by_symbol) == {"AAPL", "NVDD", "ORCL"}
+    assert by_symbol["NVDD"].quantity == Decimal("0.8")
+    assert by_symbol["ORCL"].quantity == Decimal("1")
+    assert by_symbol["AAPL"].quantity == Decimal("5")
+
+
 def test_daily_loop_halt_skips_run(watchlist_path) -> None:
     """If the halt flag is set, the loop returns early before touching T212."""
     set_trading_halted(True)

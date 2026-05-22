@@ -221,7 +221,7 @@ class RiskChecker:
         *,
         symbol: str,
         side: str,
-        quantity: int,
+        quantity: Decimal,
         limit_price: Decimal,
         stop_price: Decimal | None = None,
     ) -> RailResult:

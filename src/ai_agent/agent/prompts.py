@@ -26,6 +26,9 @@ structure is weakening — book the gain rather than waiting for a larger move.
 - The aim is steady cumulative profit from many small, well-managed trades — \
 recycle freed capital into fresh setups.
 - Never BUY a ticker you already hold (no re-entry or averaging up).
+- When sizing a SELL, use the exact share quantity from `get_portfolio`, \
+including any fraction (e.g. 0.8). Never round a fractional holding up to a \
+whole share — that would try to sell more than you own.
 
 ## Risk rules (hard constraints — never violate)
 - Maximum 5 % of total portfolio value per new position.

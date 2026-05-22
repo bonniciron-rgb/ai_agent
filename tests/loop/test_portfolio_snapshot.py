@@ -96,6 +96,27 @@ def test_position_value_unknown_ticker() -> None:
     assert snap.position_value("TSLA") == Decimal("0")
 
 
+def test_held_quantity_known_ticker() -> None:
+    snap = LivePortfolioSnapshot(FakeT212())
+    assert snap.held_quantity("AAPL") == Decimal("10")
+    assert snap.held_quantity("MSFT") == Decimal("5")
+
+
+def test_held_quantity_unknown_ticker() -> None:
+    snap = LivePortfolioSnapshot(FakeT212())
+    assert snap.held_quantity("TSLA") == Decimal("0")
+
+
+def test_held_quantity_strips_venue_suffix() -> None:
+    class SuffixT212(FakeT212):
+        def get_positions(self) -> list[FakePosition]:
+            return [FakePosition("NVDD_US_EQ", Decimal("0.8"), Decimal("31"))]
+
+    snap = LivePortfolioSnapshot(SuffixT212())
+    # Proposals use the plain symbol; the held position carries a venue suffix.
+    assert snap.held_quantity("NVDD") == Decimal("0.8")
+
+
 def test_symbol_sector_from_watchlist_map() -> None:
     snap = LivePortfolioSnapshot(FakeT212(), watchlist_sectors={"AAPL": "Technology"})
     assert snap.symbol_sector("AAPL") == "Technology"

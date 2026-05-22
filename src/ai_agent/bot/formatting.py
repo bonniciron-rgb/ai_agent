@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import os
 import re
+from decimal import Decimal
 
 APPROVE = "approve"
 REJECT = "reject"
@@ -50,6 +51,18 @@ def _truncate_sentences(text: str, max_sentences: int = 3) -> str:
     return " ".join(parts[:max_sentences]).rstrip() + " …"
 
 
+def _format_quantity(quantity: object) -> tuple[str, str]:
+    """Return ``(display_text, plural_suffix)`` for a share quantity.
+
+    Renders fractional positions honestly (``0.8``) and strips misleading
+    trailing zeros from whole-share counts.
+    """
+    qty = Decimal(str(quantity))
+    integral = qty.to_integral_value()
+    text = str(integral) if qty == integral else str(qty.normalize())
+    return text, ("" if qty == 1 else "s")
+
+
 def _resolve_dashboard_base_url() -> str | None:
     """Return the dashboard base URL (no trailing slash), or None if unknown.
 
@@ -71,7 +84,7 @@ def proposal_message(
     proposal_id: int,
     symbol: str,
     side: str,
-    quantity: int,
+    quantity: Decimal | int | str,
     limit_price: str,
     stop_price: str | None,
     rationale: str,
@@ -89,10 +102,11 @@ def proposal_message(
     stop_str = f" | Stop: ${stop_price}" if stop_price else ""
     regime_str = f" | Regime: {regime}" if regime else ""
     short_rationale = _truncate_sentences(rationale, 3)
+    qty_str, qty_suffix = _format_quantity(quantity)
 
     lines = [
         f"📋 <b>Trade Proposal #{proposal_id}</b>",
-        f"{side_em} <b>{symbol}</b> · {side.upper()} {quantity} share{'s' if quantity != 1 else ''}",
+        f"{side_em} <b>{symbol}</b> · {side.upper()} {qty_str} share{qty_suffix}",
         f"Limit: ${limit_price}{stop_str}",
         f"Conf: {conf_em} {confidence}{regime_str}",
         "",

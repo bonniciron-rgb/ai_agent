@@ -18,7 +18,7 @@ class TradeProposal(BaseModel):
 
     symbol: str
     side: OrderSide
-    quantity: int
+    quantity: Decimal  # shares; fractional allowed (e.g. 0.8 to exit a fractional position)
     limit_price: Decimal
     stop_price: Decimal | None = None
     rationale: str
@@ -28,6 +28,13 @@ class TradeProposal(BaseModel):
     @classmethod
     def upper(cls, v: str) -> str:
         return v.upper()
+
+    @field_validator("quantity")
+    @classmethod
+    def positive_quantity(cls, v: Decimal) -> Decimal:
+        if v <= 0:
+            raise ValueError(f"quantity must be positive, got {v}")
+        return v
 
     @field_validator("confidence")
     @classmethod
