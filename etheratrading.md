@@ -195,6 +195,41 @@ So the *deliverable, honest* product is currently "**a low-beta equity sleeve**"
 
 ---
 
+### Batch 51: Wire approved proposals to the broker [2026-05-26]
+**PR (draft)**
+
+A user pointed out: approving a proposal in Telegram shows *"submitting
+order"* but nothing ever happens — and the nightly reconciliation flagged
+matching "order mismatches". Root cause: both approval paths
+(`bot/handlers.py:69` and `app/api/proposals/[id]/approve/route.ts`) only
+flip the DB row to `status='approved'`. `OrderExecutor` exists (`broker/
+order_executor.py`, fully implemented with idempotency keys) but
+**nothing in the codebase invokes it** — grepping `src/`, `scripts/`,
+`app/`, `lib/`, `.github/workflows/` returns zero references outside the
+file itself. The execution layer has been dead code as long as the
+approval flow has existed; Batches 49–50 unblocking real exits made the
+gap visible.
+
+- **`src/ai_agent/broker/execute_approved.py`** — new polling worker that
+  drains the `approved` queue, submits each proposal via OrderExecutor in
+  its own transaction, and marks success as `executed`. A T212 / network
+  failure leaves the proposal `approved` so the next run retries it.
+- **`scripts/execute_approved_proposals.py`** — thin entry point matching
+  the `reconcile.py` pattern.
+- **`.github/workflows/execute-approved.yml`** — every 5 minutes Mon-Fri
+  13:00-21:55 UTC (covers US pre-market through regular close). Uses a
+  concurrency group so a slow run doesn't compete with the next trigger.
+- **`scripts/expire_stuck_approvals.py`** — one-shot to mark the
+  currently-stuck approvals as `expired` (defaults to dry-run; pass
+  `--apply` to commit) so they don't all submit at stale prices when the
+  worker first comes online.
+- **`bot/formatting.py`** — approval confirmation now says *"queued for
+  execution"* instead of the lie *"submitting order"*.
+- **`tests/broker/test_execute_approved.py`** — covers no-queue, happy
+  path, dry-run, T212 failure (retry-safe), and `--max` capping.
+
+---
+
 ### Batch 50: Support fractional share quantities in proposals [2026-05-21]
 **PR (draft)**
 
@@ -1334,4 +1369,4 @@ market leaders and new/emerging companies — including **IPOs**.
 
 **Maintained by**: Claude  
 **Next review**: Daily (or after each PR merge)  
-**Last sync**: 2026-05-21 (Batch 50 added fractional-share quantities to proposals so exits sell the exact held amount; Batch 49 fixed exits blocked by the entry-stop rail, merged as PR #90; watchlist size still limiting new buys)
+**Last sync**: 2026-05-26 (Batch 51 wired approved proposals to the broker via a 5-min polling worker + GH Actions cron; ran `expire_stuck_approvals.py --apply` to clear the dead-code-era backlog; reconciliation drift should now resolve)
