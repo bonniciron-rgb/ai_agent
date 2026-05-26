@@ -1,0 +1,58 @@
+name: execute-approved-proposals
+
+on:
+  schedule:
+    # Every 5 minutes Mon-Fri, 13:00-21:55 UTC. Covers US pre-market open
+    # (~14:00 UTC) through the regular session close (21:00 UTC). Outside
+    # this window approvals stay queued until the next session.
+    - cron: "*/5 13-21 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (don't actually submit to T212)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# Serialise overlapping runs so a slow execution doesn't compete with the
+# next 5-min trigger. The new run waits for the in-flight one to finish.
+concurrency:
+  group: execute-approved
+  cancel-in-progress: false
+
+jobs:
+  execute:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      T212_API_KEY: ${{ secrets.T212_API_KEY }}
+      T212_API_SECRET: ${{ secrets.T212_API_SECRET }}
+      T212_ENV: live
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[production]"
+
+      - name: Execute approved proposals
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            python scripts/execute_approved_proposals.py --dry-run
+          else
+            python scripts/execute_approved_proposals.py
+          fi

@@ -160,7 +160,7 @@ def parse_callback(data: str) -> tuple[str, int]:
 def decision_message(action: str, proposal_id: int, symbol: str) -> str:
     """Return a short confirmation message after a decision is recorded."""
     messages = {
-        APPROVE: f"✅ Proposal #{proposal_id} ({symbol}) approved — submitting order.",
+        APPROVE: f"✅ Proposal #{proposal_id} ({symbol}) approved — queued for execution.",
         REJECT: f"❌ Proposal #{proposal_id} ({symbol}) rejected.",
         DEFER: f"⏭ Proposal #{proposal_id} ({symbol}) deferred to next session.",
         EDIT: f"✏️ Proposal #{proposal_id} ({symbol}) — reply with new limit price:",
