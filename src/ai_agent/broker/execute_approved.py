@@ -22,6 +22,7 @@ import asyncio
 import logging
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +37,10 @@ from ai_agent.settings import get_settings
 logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_PER_RUN = int(os.environ.get("EXECUTE_MAX_PER_RUN", "20"))
+# T212 rate-limits order placement; back-to-back submits trigger HTTP 429.
+# A short pause between proposals stays well under the limit while still
+# draining a 20-deep queue inside the 5-min workflow window.
+SUBMIT_PAUSE_SECONDS = float(os.environ.get("EXECUTE_SUBMIT_PAUSE_SECONDS", "1.5"))
 
 
 def _fetch_approved_ids(*, limit: int) -> list[int]:
@@ -93,6 +98,7 @@ def run(
             base_url=settings.t212_base_url,
         )
     executor = OrderExecutor(t212_client=t212_client)
+    submitted_count = 0
 
     for pid in candidate_ids:
         # Each proposal gets its own session so per-proposal commits are
@@ -114,6 +120,9 @@ def run(
                 counts["dry_run"] += 1
                 continue
 
+            if submitted_count > 0 and SUBMIT_PAUSE_SECONDS > 0:
+                time.sleep(SUBMIT_PAUSE_SECONDS)
+
             try:
                 order = executor.submit_from_proposal(proposal, session)
                 proposal.status = ProposalStatus.executed
@@ -133,6 +142,7 @@ def run(
                 order.broker_order_id,
             )
             counts["executed"] += 1
+            submitted_count += 1
             notes.append(f"✅ {tag} → order #{order.id}")
 
     if notify and not dry_run and notes:

@@ -195,6 +195,52 @@ So the *deliverable, honest* product is currently "**a low-beta equity sleeve**"
 
 ---
 
+### Batch 52: Fix sell-side direction encoding + worker rate limit [2026-05-26]
+**PR (draft)**
+
+First live run of the polling worker (Batch 51, PR #92) hit a
+hardcoded-into-the-codebase bug nobody had noticed: every approved
+**SELL** failed with T212 `400 Invalid payload`, and rapid back-to-back
+submits hit `429 Too Many Requests`. The CSCO/IBM/QCOM Telegram digest
+made it visible:
+
+```
+❌ #3 sell CSCO qty=0.99344498 failed: T212 API error 400: Invalid payload
+❌ #7 sell QCOM qty=0.49539103 failed: T212 API error 429: too many requests
+❌ #5 sell IBM qty=0.56786123 failed: T212 API error 429: too many requests
+❌ #8 sell CSCO qty=0.99344498 failed: T212 API error 400: Invalid payload
+```
+
+Root cause #1 (the 400s): T212's `/equity/orders/limit` encodes direction
+via the **sign** of `quantity` — positive = buy, negative = sell. The
+`Proposal` model stores `side` and a positive `quantity` separately, and
+`OrderExecutor._place_order` was passing the positive quantity straight
+through regardless of `proposal.side`. T212 saw "buy 0.99 CSCO", which is
+invalid (fractional buys are by value, not share count). Every existing
+`OrderExecutor` test used `OrderSide.buy`, so the sell path had never
+run in either tests or production until PR #92 wired the executor up.
+
+Root cause #2 (the 429s): the worker fires every approved proposal in
+the queue back-to-back inside a single invocation. T212's order endpoint
+rate-limits faster than that.
+
+- **`broker/order_executor.py`** — flip the quantity sign when `side ==
+  sell` before calling `place_limit_order` / `place_stop_limit_order`.
+- **`broker/execute_approved.py`** — `time.sleep(SUBMIT_PAUSE_SECONDS)`
+  (default 1.5s, env-tunable) between successful submits.
+- **`tests/broker/test_order_executor.py`** — two new tests using a
+  capturing httpx transport: sell proposals serialise to negative
+  quantity; buy path still positive (regression guard).
+
+Note for the operator: the digest shows two duplicate CSCO sells (#3 and
+#8, same 0.99344498 quantity). After this fix lands, the first will
+succeed and the second will fail with "insufficient holdings" since the
+position is by then gone. Manually expire one (`UPDATE proposal SET
+status='expired' WHERE id=8` or run `scripts/expire_stuck_approvals.py`
+after the first one fills).
+
+---
+
 ### Batch 51: Wire approved proposals to the broker [2026-05-26]
 **PR (draft)**
 
@@ -1369,4 +1415,4 @@ market leaders and new/emerging companies — including **IPOs**.
 
 **Maintained by**: Claude  
 **Next review**: Daily (or after each PR merge)  
-**Last sync**: 2026-05-26 (Batch 51 wired approved proposals to the broker via a 5-min polling worker + GH Actions cron; ran `expire_stuck_approvals.py --apply` to clear the dead-code-era backlog; reconciliation drift should now resolve)
+**Last sync**: 2026-05-26 (Batch 52 hotfix: sell orders now flip the quantity sign per T212's API convention, and the worker paces submits at 1.5s to avoid 429s; Batch 51 wired approved proposals to the broker via a 5-min polling worker + GH Actions cron)
