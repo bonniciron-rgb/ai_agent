@@ -49,7 +49,7 @@ MODEL = "claude-sonnet-4-6"
 
 # Default model IDs (overridden by Settings / env vars in daily_loop.py)
 DEFAULT_SCREENING_MODEL = "claude-haiku-4-5-20251001"
-DEFAULT_DECISION_MODEL = "claude-opus-4-7"
+DEFAULT_DECISION_MODEL = "claude-opus-4-8"
 
 # Decision-pass system prompt with prompt-cache marker on the static block.
 # Anthropic caches all content up to and including the block carrying

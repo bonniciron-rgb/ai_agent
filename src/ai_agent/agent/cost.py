@@ -1,8 +1,8 @@
 """LLM cost calculation helpers for tiered routing (m18).
 
 Pricing (per million tokens, as of May 2026):
-  Haiku 4.5   — input $1.00,  output $5.00
-  Opus  4.7   — input $15.00, output $75.00
+  Haiku 4.5      — input $1.00,  output $5.00
+  Opus  4.7/4.8  — input $15.00, output $75.00
   Cache write — 1.25x input price
   Cache read  — 0.10x input price
 """
@@ -18,6 +18,10 @@ _PRICING: dict[str, dict[str, float]] = {
         "output": 5.00,
     },
     "claude-opus-4-7": {
+        "input": 15.00,
+        "output": 75.00,
+    },
+    "claude-opus-4-8": {
         "input": 15.00,
         "output": 75.00,
     },

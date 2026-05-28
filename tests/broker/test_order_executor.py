@@ -210,3 +210,87 @@ def test_submit_after_rejected_retries_t212(engine: Engine) -> None:
     assert len(call_log) == 1  # T212 was called (retry allowed)
     assert updated_status == OrderStatus.submitted
     assert updated_broker_id == "77"
+
+
+# ---------------------------------------------------------------------------
+# Sell-side direction encoding
+# ---------------------------------------------------------------------------
+
+
+def _capturing_t212_client() -> tuple[T212Client, list[dict]]:
+    """Return (client, captured_payloads) — records each request body it sees."""
+    captured: list[dict] = []
+    payload = {
+        "id": 555,
+        "ticker": "CSCO_US_EQ",
+        "quantity": "-0.99344498",
+        "status": "PENDING",
+        "type": "LIMIT",
+        "limitPrice": "66.00",
+        "filledQuantity": "0",
+        "creationTime": "2026-05-26T14:30:00.000Z",
+        "timeValidity": "GTC",
+    }
+
+    class _Transport(httpx.BaseTransport):
+        def handle_request(self, request: httpx.Request) -> httpx.Response:
+            if request.method == "POST":
+                captured.append(json.loads(request.content.decode()))
+            return httpx.Response(
+                200,
+                text=json.dumps(payload),
+                headers={"content-type": "application/json"},
+            )
+
+    http = httpx.Client(transport=_Transport(), base_url="https://demo.trading212.com")
+    return T212Client(api_key="test", http_client=http), captured
+
+
+def test_sell_proposal_submits_negative_quantity(engine: Engine) -> None:
+    """T212 encodes order direction as quantity sign — sells must go negative.
+
+    Regression test for the bug where the worker shipped sells with positive
+    quantities and T212 returned 400 'Invalid payload' on every approved
+    SELL proposal (CSCO/IBM/QCOM in the first live run of PR #92).
+    """
+    client, captured = _capturing_t212_client()
+    executor = OrderExecutor(t212_client=client)
+
+    with Session(engine) as session:
+        proposal = Proposal(
+            expires_at=datetime(2026, 5, 27, 14, 30, tzinfo=UTC),
+            symbol="CSCO",
+            side=OrderSide.sell,
+            quantity=Decimal("0.99344498"),
+            limit_price=Decimal("66.00"),
+            rationale="exit",
+            confidence="high",
+            status=ProposalStatus.approved,
+            decided_at=_DECIDED_AT,
+            decided_by="@alice",
+        )
+        session.add(proposal)
+        session.commit()
+        session.refresh(proposal)
+        executor.submit_from_proposal(proposal, session)
+        session.commit()
+
+    assert len(captured) == 1
+    body = captured[0]
+    # Quantity must be serialised negative; sign tells T212 it's a sell.
+    assert Decimal(str(body["quantity"])) == Decimal("-0.99344498")
+    assert body["ticker"] == "CSCO_US_EQ"
+
+
+def test_buy_proposal_still_submits_positive_quantity(engine: Engine) -> None:
+    """Belt-and-braces: the sign flip must not regress the buy path."""
+    client, captured = _capturing_t212_client()
+    executor = OrderExecutor(t212_client=client)
+
+    with Session(engine) as session:
+        proposal = _save_proposal(session)  # buy AAPL qty=5
+        executor.submit_from_proposal(proposal, session)
+        session.commit()
+
+    assert len(captured) == 1
+    assert Decimal(str(captured[0]["quantity"])) == Decimal("5")

@@ -195,6 +195,91 @@ So the *deliverable, honest* product is currently "**a low-beta equity sleeve**"
 
 ---
 
+### Batch 53: Expand watchlist + upgrade decision model to Opus 4.8 [2026-05-28]
+**PR (draft)**
+
+The operator observed the agent only ever proposes SELLs, never BUYs.
+Root cause is structural, not a bug:
+
+1. **Watchlist was 14 mega-caps, and held tickers are stripped before the
+   screening pass** (`runner.py:304`). Once ~5 are held, almost no un-held
+   buy candidates remain to surface — the roadmap flagged this repeatedly
+   ("watchlist size still limiting new buys").
+2. Every held position is *guaranteed* an exit review (`runner.py:356`),
+   while buys must clear screening + 5 risk rails (stop, position cap,
+   sector cap, cooldown, turnover); sells skip all but turnover. Sells
+   structurally outnumber buys.
+
+Per the operator's chosen lever (expand the watchlist):
+
+- **`config/watchlist.yaml`** — grown 14 → 30 symbols across 10 sectors
+  (added AVGO, AMD, NFLX, DIS, HD, MCD, PG, KO, JNJ, ABBV, HON, CVX, MA,
+  BAC, NEE, LIN). Keeps fresh un-held candidates available every day.
+- **`scripts/seed_watchlist.py`** — the YAML only seeds an *empty* DB
+  (`bootstrap_from_yaml` is a no-op once populated), so prod edits never
+  land. This one-shot idempotently upserts missing YAML symbols into the
+  DB (dry-run default, `--apply` to commit). **Operator must run it once.**
+- **Decision model `claude-opus-4-7` → `claude-opus-4-8`** in
+  `settings.py` + `runner.py`, with a matching `cost.py` pricing entry
+  ($15/$75 per M, Opus tier) so cost tracking stays accurate (the prefix
+  matcher would otherwise fall back to Sonnet pricing).
+
+Also fixed an unrelated CI time-bomb: `tests/external_signals/
+test_store.py` hardcoded `NOW = 2026-05-07` while the store filters on the
+real clock, so its `days_back` assertions broke once wall-clock drifted
+past the window. NOW now tracks `datetime.now(UTC)`.
+
+NOT changed (operator declined): the sell-leaning prompt wording and the
+shortlist cap (5).
+
+---
+
+### Batch 52: Fix sell-side direction encoding + worker rate limit [2026-05-26]
+**PR (draft)**
+
+First live run of the polling worker (Batch 51, PR #92) hit a
+hardcoded-into-the-codebase bug nobody had noticed: every approved
+**SELL** failed with T212 `400 Invalid payload`, and rapid back-to-back
+submits hit `429 Too Many Requests`. The CSCO/IBM/QCOM Telegram digest
+made it visible:
+
+```
+❌ #3 sell CSCO qty=0.99344498 failed: T212 API error 400: Invalid payload
+❌ #7 sell QCOM qty=0.49539103 failed: T212 API error 429: too many requests
+❌ #5 sell IBM qty=0.56786123 failed: T212 API error 429: too many requests
+❌ #8 sell CSCO qty=0.99344498 failed: T212 API error 400: Invalid payload
+```
+
+Root cause #1 (the 400s): T212's `/equity/orders/limit` encodes direction
+via the **sign** of `quantity` — positive = buy, negative = sell. The
+`Proposal` model stores `side` and a positive `quantity` separately, and
+`OrderExecutor._place_order` was passing the positive quantity straight
+through regardless of `proposal.side`. T212 saw "buy 0.99 CSCO", which is
+invalid (fractional buys are by value, not share count). Every existing
+`OrderExecutor` test used `OrderSide.buy`, so the sell path had never
+run in either tests or production until PR #92 wired the executor up.
+
+Root cause #2 (the 429s): the worker fires every approved proposal in
+the queue back-to-back inside a single invocation. T212's order endpoint
+rate-limits faster than that.
+
+- **`broker/order_executor.py`** — flip the quantity sign when `side ==
+  sell` before calling `place_limit_order` / `place_stop_limit_order`.
+- **`broker/execute_approved.py`** — `time.sleep(SUBMIT_PAUSE_SECONDS)`
+  (default 1.5s, env-tunable) between successful submits.
+- **`tests/broker/test_order_executor.py`** — two new tests using a
+  capturing httpx transport: sell proposals serialise to negative
+  quantity; buy path still positive (regression guard).
+
+Note for the operator: the digest shows two duplicate CSCO sells (#3 and
+#8, same 0.99344498 quantity). After this fix lands, the first will
+succeed and the second will fail with "insufficient holdings" since the
+position is by then gone. Manually expire one (`UPDATE proposal SET
+status='expired' WHERE id=8` or run `scripts/expire_stuck_approvals.py`
+after the first one fills).
+
+---
+
 ### Batch 51: Wire approved proposals to the broker [2026-05-26]
 **PR (draft)**
 
@@ -1369,4 +1454,4 @@ market leaders and new/emerging companies — including **IPOs**.
 
 **Maintained by**: Claude  
 **Next review**: Daily (or after each PR merge)  
-**Last sync**: 2026-05-26 (Batch 51 wired approved proposals to the broker via a 5-min polling worker + GH Actions cron; ran `expire_stuck_approvals.py --apply` to clear the dead-code-era backlog; reconciliation drift should now resolve)
+**Last sync**: 2026-05-28 (Batch 53: watchlist expanded 14→30 symbols across 10 sectors to surface BUY candidates, decision model bumped to Opus 4.8; operator must run `scripts/seed_watchlist.py --apply` to push the new symbols into the prod DB. Batch 52 hotfix: sell orders flip quantity sign per T212 convention + worker paces submits at 1.5s)

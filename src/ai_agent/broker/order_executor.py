@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING
 from sqlmodel import Session, select
 
 from ai_agent.broker.t212_client import T212Client
-from ai_agent.db.models import Order, OrderStatus, OrderType, Proposal
+from ai_agent.db.models import Order, OrderSide, OrderStatus, OrderType, Proposal
 
 if TYPE_CHECKING:
     pass
@@ -176,16 +176,20 @@ class OrderExecutor:
             self._t212._http.headers["Idempotency-Key"] = ikey
 
             ticker = self._make_ticker(proposal.symbol)
+            # T212 encodes order direction as the sign of `quantity` — positive
+            # is buy, negative is sell.  The Proposal model stores side
+            # separately with quantity always positive, so flip the sign here.
+            qty = proposal.quantity if proposal.side == OrderSide.buy else -proposal.quantity
             if order_type == OrderType.stop_limit:
                 return self._t212.place_stop_limit_order(
                     ticker=ticker,
-                    quantity=proposal.quantity,
+                    quantity=qty,
                     limit_price=proposal.limit_price,
                     stop_price=proposal.stop_price,  # type: ignore[arg-type]
                 )
             return self._t212.place_limit_order(
                 ticker=ticker,
-                quantity=proposal.quantity,
+                quantity=qty,
                 limit_price=proposal.limit_price,
             )
         finally:
