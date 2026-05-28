@@ -195,6 +195,45 @@ So the *deliverable, honest* product is currently "**a low-beta equity sleeve**"
 
 ---
 
+### Batch 53: Expand watchlist + upgrade decision model to Opus 4.8 [2026-05-28]
+**PR (draft)**
+
+The operator observed the agent only ever proposes SELLs, never BUYs.
+Root cause is structural, not a bug:
+
+1. **Watchlist was 14 mega-caps, and held tickers are stripped before the
+   screening pass** (`runner.py:304`). Once ~5 are held, almost no un-held
+   buy candidates remain to surface — the roadmap flagged this repeatedly
+   ("watchlist size still limiting new buys").
+2. Every held position is *guaranteed* an exit review (`runner.py:356`),
+   while buys must clear screening + 5 risk rails (stop, position cap,
+   sector cap, cooldown, turnover); sells skip all but turnover. Sells
+   structurally outnumber buys.
+
+Per the operator's chosen lever (expand the watchlist):
+
+- **`config/watchlist.yaml`** — grown 14 → 30 symbols across 10 sectors
+  (added AVGO, AMD, NFLX, DIS, HD, MCD, PG, KO, JNJ, ABBV, HON, CVX, MA,
+  BAC, NEE, LIN). Keeps fresh un-held candidates available every day.
+- **`scripts/seed_watchlist.py`** — the YAML only seeds an *empty* DB
+  (`bootstrap_from_yaml` is a no-op once populated), so prod edits never
+  land. This one-shot idempotently upserts missing YAML symbols into the
+  DB (dry-run default, `--apply` to commit). **Operator must run it once.**
+- **Decision model `claude-opus-4-7` → `claude-opus-4-8`** in
+  `settings.py` + `runner.py`, with a matching `cost.py` pricing entry
+  ($15/$75 per M, Opus tier) so cost tracking stays accurate (the prefix
+  matcher would otherwise fall back to Sonnet pricing).
+
+Also fixed an unrelated CI time-bomb: `tests/external_signals/
+test_store.py` hardcoded `NOW = 2026-05-07` while the store filters on the
+real clock, so its `days_back` assertions broke once wall-clock drifted
+past the window. NOW now tracks `datetime.now(UTC)`.
+
+NOT changed (operator declined): the sell-leaning prompt wording and the
+shortlist cap (5).
+
+---
+
 ### Batch 52: Fix sell-side direction encoding + worker rate limit [2026-05-26]
 **PR (draft)**
 
@@ -1415,4 +1454,4 @@ market leaders and new/emerging companies — including **IPOs**.
 
 **Maintained by**: Claude  
 **Next review**: Daily (or after each PR merge)  
-**Last sync**: 2026-05-26 (Batch 52 hotfix: sell orders now flip the quantity sign per T212's API convention, and the worker paces submits at 1.5s to avoid 429s; Batch 51 wired approved proposals to the broker via a 5-min polling worker + GH Actions cron)
+**Last sync**: 2026-05-28 (Batch 53: watchlist expanded 14→30 symbols across 10 sectors to surface BUY candidates, decision model bumped to Opus 4.8; operator must run `scripts/seed_watchlist.py --apply` to push the new symbols into the prod DB. Batch 52 hotfix: sell orders flip quantity sign per T212 convention + worker paces submits at 1.5s)

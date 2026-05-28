@@ -57,7 +57,7 @@ class Settings(BaseSettings):
     # Tiered LLM routing (m18)
     llm_tiered: bool = True  # set LLM_TIERED=false to revert to single-pass
     llm_screening_model: str = "claude-haiku-4-5-20251001"
-    llm_decision_model: str = "claude-opus-4-7"
+    llm_decision_model: str = "claude-opus-4-8"
     llm_shortlist_max: int = 5  # max tickers forwarded from screening → decision
 
     @property

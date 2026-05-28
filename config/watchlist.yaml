@@ -1,6 +1,11 @@
 # Active watchlist used by the daily cron.
 # Edit freely; symbols are uppercased automatically. Holdings are auto-merged at runtime.
 # Sector strings are used by the 30%-NAV sector cap risk rail.
+#
+# NOTE: this YAML only seeds the DB watchlist when the DB table is EMPTY
+# (see db/watchlist_store.py:bootstrap_from_yaml). To push edits into an
+# already-seeded prod DB, run `python scripts/seed_watchlist.py --apply`,
+# which idempotently upserts every entry below into the DB.
 
 entries:
   # Mega-cap tech
@@ -17,11 +22,33 @@ entries:
     tags: [ai]
   - symbol: META
     sector: communication_services
+  - symbol: AVGO
+    sector: technology
+    tags: [ai, semis]
+  - symbol: AMD
+    sector: technology
+    tags: [ai, semis]
 
-  # Mega-cap consumer
+  # Communication services / media
+  - symbol: NFLX
+    sector: communication_services
+  - symbol: DIS
+    sector: communication_services
+
+  # Consumer discretionary
+  - symbol: HD
+    sector: consumer_discretionary
+  - symbol: MCD
+    sector: consumer_discretionary
+
+  # Mega-cap consumer staples
   - symbol: COST
     sector: consumer_staples
   - symbol: WMT
+    sector: consumer_staples
+  - symbol: PG
+    sector: consumer_staples
+  - symbol: KO
     sector: consumer_staples
 
   # Healthcare
@@ -30,11 +57,19 @@ entries:
   - symbol: LLY
     sector: healthcare
     tags: [glp1]
+  - symbol: JNJ
+    sector: healthcare
+  - symbol: ABBV
+    sector: healthcare
 
   # Industrials & energy
   - symbol: CAT
     sector: industrials
+  - symbol: HON
+    sector: industrials
   - symbol: XOM
+    sector: energy
+  - symbol: CVX
     sector: energy
 
   # Financials
@@ -42,3 +77,13 @@ entries:
     sector: financials
   - symbol: V
     sector: financials
+  - symbol: MA
+    sector: financials
+  - symbol: BAC
+    sector: financials
+
+  # Utilities & materials (diversifiers — keep un-held candidates available)
+  - symbol: NEE
+    sector: utilities
+  - symbol: LIN
+    sector: materials

@@ -50,7 +50,10 @@ def _db(monkeypatch):
 # ---------------------------------------------------------------------------
 
 CHANNEL = "@JdubTrades_Telegram"
-NOW = datetime(2026, 5, 7, 10, 0, tzinfo=UTC)
+# Relative to the real clock: get_signals_for_symbol filters by
+# datetime.now(UTC) - days_back, so a hardcoded date silently breaks the
+# days_back assertions once wall-clock time drifts past the window.
+NOW = datetime.now(UTC)
 
 
 def _msg(message_id: int = 1, offset_hours: int = 0) -> RawMessage:
