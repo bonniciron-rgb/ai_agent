@@ -1,0 +1,51 @@
+name: compute-quant-signals
+
+on:
+  schedule:
+    # 06:00 UTC Mon-Fri — 30 min before the daily trade loop (06:30) so the
+    # agent's get_quant_signals tool reads a fresh snapshot. Weekends skipped.
+    - cron: "0 6 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Compute and log without writing to the DB"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compute-signals
+  cancel-in-progress: false
+
+jobs:
+  compute:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[production]"
+
+      - name: Compute quant-signal snapshots
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            python scripts/compute_signals.py --dry-run
+          else
+            python scripts/compute_signals.py
+          fi

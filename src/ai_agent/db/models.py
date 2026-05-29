@@ -281,6 +281,28 @@ class ExposureSnapshot(SQLModel, table=True):
         return round(self.target_allocation * 100)
 
 
+class SignalSnapshot(SQLModel, table=True):
+    """Per-symbol quant-signal scores for one day.
+
+    Written by ai_agent.signals.snapshot_job (via scripts/compute_signals.py)
+    on a daily cron BEFORE the trade loop. Read by the agent's
+    get_quant_signals tool so the LLM sees event/positioning alpha
+    (post-earnings drift, analyst-revision momentum, insider buying, short
+    interest) that the pure-technical get_features snapshot lacks.
+    """
+
+    __table_args__ = (UniqueConstraint("symbol", "as_of", name="uq_signalsnapshot_symbol_date"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    symbol: str = Field(index=True, max_length=16)
+    as_of: date = Field(index=True)
+    composite_score: float  # equal-weight mean of the sub-signal scores, [0, 1]
+    composite_confidence: float = 1.0
+    active_count: int = 0  # number of sub-signals that fired (score > 0)
+    signals_json: str = Field(default="{}", max_length=4096)  # {name: {score, confidence, notes}}
+    created_at: datetime = Field(default_factory=_utcnow)
+
+
 class DailyAnalysis(SQLModel, table=True):
     """One row per daily-loop run — the audit trail behind 'no trade today'.
 

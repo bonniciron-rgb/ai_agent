@@ -195,6 +195,46 @@ So the *deliverable, honest* product is currently "**a low-beta equity sleeve**"
 
 ---
 
+### Batch 54: Wire dormant quant signals into the agent [2026-05-28]
+**PR (draft)**
+
+A review found a whole tested alpha library in `src/ai_agent/signals/`
+(`pead`, `analyst_revisions`, `insider_buying`, `short_interest`,
+`sector_rs`, `composite`) that the trade-proposing agent **could not see** —
+`grep` confirmed no import from `agent/`, `features/`, or `loop/`. It fed
+only the separate `exposure/tilt` overlay and backtests. The agent's
+decision tools were pure technicals (`get_features`) plus news / external
+signals / 13F. Best alpha, built and disconnected.
+
+This wires four of them in (the ones with clean live data sources):
+
+- **`get_quant_signals` agent tool** (`agent/tools.py`) — returns today's
+  per-signal scores [0,1] + composite + notes for a ticker. Added to the
+  decision-pass `TOOL_SCHEMAS`, the `Toolbox` dispatch, and the system
+  prompt's workflow + signal hierarchy.
+- **`signals/snapshot_job.py`** — a daily job that computes the four
+  signals for the whole watchlist using live data (Finnhub earnings +
+  recommendations, SEC EDGAR Form 4, yfinance short interest), reusing the
+  resilient `signals/runner._inject_*` helpers, and upserts a
+  **`SignalSnapshot`** row per symbol. The tool reads the latest snapshot.
+- **Precompute-and-store, not call-live-in-the-loop**: keeps slow,
+  rate-limited APIs out of the latency-sensitive decision loop, and leaves a
+  historical signal record the feedback loop (next PR, #1) will correlate
+  against trade outcomes.
+- **`scripts/compute_signals.py`** + **`.github/workflows/compute-signals.yml`**
+  (06:00 UTC Mon-Fri, 30 min before the trade loop). Needs `FINNHUB_API_KEY`.
+
+Signals are sparse by nature (most days every score is 0); the tool
+description and prompt make clear that 0 is neutral, not bearish, and a
+non-zero score is a real tailwind. Sector RS (A1) is deferred — it needs
+sector-ETF bars ingested into the `Bar` table, which the daily loop doesn't
+do yet.
+
+Next (your "#1"): the outcome/feedback loop — label every proposal with
+forward returns and slice win-rate by confidence / regime / signal.
+
+---
+
 ### Batch 53: Expand watchlist + upgrade decision model to Opus 4.8 [2026-05-28]
 **PR (draft)**
 
@@ -1454,4 +1494,4 @@ market leaders and new/emerging companies — including **IPOs**.
 
 **Maintained by**: Claude  
 **Next review**: Daily (or after each PR merge)  
-**Last sync**: 2026-05-28 (Batch 53: watchlist expanded 14→30 symbols across 10 sectors to surface BUY candidates, decision model bumped to Opus 4.8; operator must run `scripts/seed_watchlist.py --apply` to push the new symbols into the prod DB. Batch 52 hotfix: sell orders flip quantity sign per T212 convention + worker paces submits at 1.5s)
+**Last sync**: 2026-05-28 (Batch 54: wired 4 dormant quant signals — post-earnings drift, analyst revisions, insider buying, short interest — into a new `get_quant_signals` agent tool, fed by a daily SignalSnapshot job; operator must set `FINNHUB_API_KEY` secret for the compute-signals workflow. Batch 53: watchlist 14→30 + Opus 4.8, run `scripts/seed_watchlist.py --apply` once)

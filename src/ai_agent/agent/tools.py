@@ -17,6 +17,7 @@ from typing import Any
 # wire every optional tool (e.g. backtest replay).
 _noop_signals: Callable[[dict], Any] = lambda _: []  # noqa: E731
 _noop_holdings: Callable[[dict], Any] = lambda _: {"institutional_holdings": []}  # noqa: E731
+_noop_quant: Callable[[dict], Any] = lambda _: {"signals": {}, "note": "not wired"}  # noqa: E731
 
 TOOL_SCHEMAS: list[dict] = [
     {
@@ -109,6 +110,28 @@ TOOL_SCHEMAS: list[dict] = [
         },
     },
     {
+        "name": "get_quant_signals",
+        "description": (
+            "Return today's quantitative event/positioning signals for a ticker, "
+            "precomputed daily from live data: post_earnings_drift (Finnhub earnings "
+            "surprises), analyst_revision_momentum (Finnhub recommendation trends), "
+            "insider_buying (SEC Form 4), and short_interest_momentum (yfinance). "
+            "Each signal returns a score in [0,1] (0 = inactive, higher = stronger "
+            "bullish tilt) plus explanatory notes, and 'composite_score' is their mean. "
+            "These signals are SPARSE — on most days for most tickers every score is 0, "
+            "which is normal and not bearish. A non-zero score is a meaningful tailwind "
+            "to weigh alongside your technical read. Complements get_features (pure "
+            "technicals). An empty 'signals' object means no snapshot was computed today."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "symbol": {"type": "string", "description": "Ticker symbol, e.g. AAPL"},
+            },
+            "required": ["symbol"],
+        },
+    },
+    {
         "name": "propose_trade",
         "description": (
             "Record a trade proposal. Only call this when you have a clear signal "
@@ -173,6 +196,7 @@ class Toolbox:
     propose_trade: Callable[[dict], Any]
     get_external_signals: Callable[[dict], Any] = field(default=_noop_signals)
     get_institutional_holdings: Callable[[dict], Any] = field(default=_noop_holdings)
+    get_quant_signals: Callable[[dict], Any] = field(default=_noop_quant)
     _proposals: list = field(default_factory=list)
 
     def dispatch(self, name: str, inputs: dict) -> Any:
@@ -182,6 +206,7 @@ class Toolbox:
             "get_portfolio": self.get_portfolio,
             "get_external_signals": self.get_external_signals,
             "get_institutional_holdings": self.get_institutional_holdings,
+            "get_quant_signals": self.get_quant_signals,
             "propose_trade": self._record_and_call(self.propose_trade),
         }.get(name)
         if fn is None:
