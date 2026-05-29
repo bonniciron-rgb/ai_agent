@@ -48,6 +48,7 @@ from ai_agent.signals.runner import (
     _inject_recommendations,
     _inject_short_interest,
 )
+from ai_agent.signals.sector_rs import SectorRelativeStrengthSignal
 from ai_agent.signals.short_interest import ShortInterestMomentumSignal
 
 if TYPE_CHECKING:
@@ -59,15 +60,96 @@ logger = logging.getLogger(__name__)
 WARMUP_BARS = 60
 DAYS_BACK = 400
 
+# SPDR sector ETFs covering every sector string used in config/watchlist.yaml.
+# Symbols whose sector is missing or unmapped fall back to SPY (whole market).
+SECTOR_TO_ETF: dict[str, str] = {
+    "technology": "XLK",
+    "communication_services": "XLC",
+    "consumer_discretionary": "XLY",
+    "consumer_staples": "XLP",
+    "healthcare": "XLV",
+    "financials": "XLF",
+    "industrials": "XLI",
+    "energy": "XLE",
+    "utilities": "XLU",
+    "materials": "XLB",
+}
+DEFAULT_ETF = "SPY"
 
-def build_signals() -> list[Signal]:
-    """The four live event/positioning signals, freshly constructed (empty data)."""
-    return [
+
+def _build_sector_map(watchlist) -> dict[str, str]:
+    """Map ``{SYMBOL: ETF}`` from a Watchlist's per-entry sector strings.
+
+    Symbols with an unknown / missing sector get :data:`DEFAULT_ETF` (SPY) so
+    SectorRS still has an opinion (stock vs. whole market) rather than going
+    flat by default.
+    """
+    return {
+        entry.symbol.upper(): SECTOR_TO_ETF.get(entry.sector or "", DEFAULT_ETF)
+        for entry in watchlist.entries
+    }
+
+
+def _fetch_sector_etf_prices(etfs: list[str], *, days_back: int = DAYS_BACK) -> dict:
+    """Pull closing-price series for sector ETFs via yfinance.
+
+    Reuses the same fetcher that ``exposure/job.py`` uses live, so the snapshot
+    job doesn't need sector ETFs to be ingested into the ``Bar`` table — a
+    deliberate trade-off to keep SectorRS wiring contained.
+
+    Returns ``{ETF: pd.Series}`` keyed by ticker with a date-typed index
+    matching ``SignalContext.bars.index``. Resilient: a network failure logs
+    and returns ``{}``, after which SectorRS degrades to ``score=0`` with a
+    clear "no sector prices" note.
+    """
+    if not etfs:
+        return {}
+    try:
+        import pandas as pd
+
+        from ai_agent.exposure.job import _fetch_recent_bars
+    except ImportError:
+        logger.warning("yfinance / pandas missing; SectorRS will be flat")
+        return {}
+    try:
+        bars = _fetch_recent_bars(sorted(set(etfs)), lookback_days=days_back)
+    except Exception:
+        logger.exception("yfinance ETF fetch failed; SectorRS will be flat")
+        return {}
+    out: dict = {}
+    for etf, df in bars.items():
+        if df is None or df.empty or "close" not in df.columns:
+            continue
+        ser = df["close"].copy()
+        ser.index = pd.to_datetime(ser.index).date
+        out[etf.upper()] = ser
+    return out
+
+
+def build_signals(
+    *,
+    sector_map: dict[str, str] | None = None,
+    sector_prices: dict | None = None,
+) -> list[Signal]:
+    """The event/positioning signals, freshly constructed (empty data).
+
+    ``sector_map`` enables SectorRS; without it, SectorRS is omitted (the
+    signal needs to know which ETF to compare each symbol to).
+    """
+    sigs: list[Signal] = [
         PostEarningsDriftSignal(),
         AnalystRevisionMomentumSignal(),
         InsiderBuyingSignal(),
         ShortInterestMomentumSignal(),
     ]
+    if sector_map:
+        sigs.append(
+            SectorRelativeStrengthSignal(
+                sector_map=sector_map,
+                sector_prices=sector_prices or {},
+            )
+        )
+    return sigs
 
 
 def _inject_live_data(signals: list[Signal], symbols: list[str], as_of: date) -> None:
@@ -93,14 +175,22 @@ def compute_snapshots(
     as_of: date | None = None,
     days_back: int = DAYS_BACK,
     signals: list[Signal] | None = None,
+    sector_map: dict[str, str] | None = None,
 ) -> dict[str, dict[str, SignalResult]]:
     """Return ``{symbol: {signal_name: SignalResult}}`` for *symbols* at *as_of*.
 
     Live data is fetched once per source, then each symbol's bars drive the
     per-symbol ``compute()``. Symbols with too little history are skipped.
+
+    When *signals* is None and *sector_map* is provided, sector ETF prices are
+    fetched live (via yfinance) and SectorRS is included as the 5th signal.
     """
     as_of = as_of or date.today()
-    signals = signals if signals is not None else build_signals()
+    if signals is None:
+        sector_prices = (
+            _fetch_sector_etf_prices(list(set(sector_map.values()))) if sector_map else {}
+        )
+        signals = build_signals(sector_map=sector_map, sector_prices=sector_prices)
     _inject_live_data(signals, symbols, as_of)
 
     out: dict[str, dict[str, SignalResult]] = {}
@@ -194,13 +284,16 @@ def run(
 ) -> dict[str, int]:
     """Compute and persist snapshots for *symbols* (default: the DB watchlist)."""
     _engine.init_schema()
+    sector_map: dict[str, str] | None = None
     if symbols is None:
         from ai_agent.watchlist import load_watchlist_from_db
 
-        symbols = load_watchlist_from_db().symbols
+        watchlist = load_watchlist_from_db()
+        symbols = watchlist.symbols
+        sector_map = _build_sector_map(watchlist)
     as_of = as_of or date.today()
 
-    results = compute_snapshots(symbols, as_of=as_of)
+    results = compute_snapshots(symbols, as_of=as_of, sector_map=sector_map)
     active = sum(1 for ps in results.values() if any(r.score > 0 for r in ps.values()))
     logger.info(
         "Computed signals for %d/%d symbols; %d have at least one active signal",

@@ -195,6 +195,48 @@ So the *deliverable, honest* product is currently "**a low-beta equity sleeve**"
 
 ---
 
+### Batch 56: Complete the signal coverage — wire sector RS [2026-05-29]
+**PR (draft)**
+
+Operator pushback on Batch 54: shipping 4-of-5 signals while the 5th sits
+built and tested in `signals/sector_rs.py` makes the wiring feel
+half-done. The deferral excuse — "needs sector-ETF bars ingested into
+the Bar table" — is thin, because `exposure/job.py` already fetches ETF
+prices via yfinance at runtime. Reusing that pattern in the snapshot job
+keeps SectorRS wiring contained and the DB ingestion path untouched.
+
+- **`signals/snapshot_job.py`** — adds:
+  - `SECTOR_TO_ETF` constant covering all 10 sector strings used in
+    `config/watchlist.yaml` → SPDR ETFs (XLK, XLC, XLY, XLP, XLV, XLF,
+    XLI, XLE, XLU, XLB); unmapped sectors fall back to SPY.
+  - `_build_sector_map(watchlist)` — produces `{SYMBOL: ETF}` from the
+    Watchlist's per-entry sector strings.
+  - `_fetch_sector_etf_prices(etfs)` — reuses `exposure.job._fetch_recent_bars`
+    so live yfinance fetches happen exactly once, then SectorRS is
+    instantiated with pre-loaded `sector_prices` and `_inject_sector_prices`
+    no-ops cleanly.
+  - `build_signals(sector_map=, sector_prices=)` — conditionally includes
+    SectorRelativeStrengthSignal as the 5th signal when a sector_map is
+    provided. The default path (test callers without a watchlist) still
+    returns the original 4 — backward-compatible.
+  - `compute_snapshots(..., sector_map=...)` and `run()` thread the
+    sector_map from the loaded watchlist.
+- **`agent/tools.py`** + **`agent/prompts.py`** — update the
+  `get_quant_signals` tool description and the prompt's signal list to
+  name all 5 signals (was 4).
+- **Resilient**: yfinance failure → empty `sector_prices` → SectorRS
+  returns `score=0` with a clear "no sector prices" note. Snapshot job
+  doesn't crash.
+- **3 new tests** cover `_build_sector_map` (incl. fallback to SPY for
+  unmapped/missing sectors), `build_signals` returning 4 vs 5 signals
+  depending on `sector_map`, and `compute_snapshots` including SectorRS
+  in per-symbol results.
+
+This completes the alpha-library wiring: every signal in
+`src/ai_agent/signals/` is now exposed to the agent via `get_quant_signals`.
+
+---
+
 ### Batch 55: Close the loop — calibration feedback to the agent [2026-05-29]
 **PR (draft)**
 
@@ -1531,4 +1573,4 @@ market leaders and new/emerging companies — including **IPOs**.
 
 **Maintained by**: Claude  
 **Next review**: Daily (or after each PR merge)  
-**Last sync**: 2026-05-29 (Batch 55: closed the feedback loop — `feedback/calibration.py` turns closed `ShadowPosition` rows into per-confidence/side/signal win-rate stats, fed into the decision prompt and the daily digest. Batch 54: 4 dormant quant signals wired in via `get_quant_signals` — set `FINNHUB_API_KEY` secret. Batch 53: watchlist 14→30 + Opus 4.8, run `scripts/seed_watchlist.py --apply` once)
+**Last sync**: 2026-05-29 (Batch 56: completed the signal wiring — sector_relative_strength is now the 5th `get_quant_signals` output, fed by yfinance ETF fetches mirroring `exposure/job.py`. Batch 55: closed the feedback loop — calibration from closed `ShadowPosition` rows into the prompt + digest. Batch 54: 4 quant signals wired — set `FINNHUB_API_KEY` secret. Batch 53: run `scripts/seed_watchlist.py --apply` once)
