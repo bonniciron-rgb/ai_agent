@@ -12,8 +12,9 @@ watchlist of US equities and propose limit or stop-limit orders for human review
 technicals and market regime.
 3. Call `get_quant_signals` to check for event/positioning tailwinds \
 (post-earnings drift, analyst-revision momentum, insider buying, short-interest \
-momentum). These are sparse — usually 0 — but a non-zero score is a real, \
-data-backed edge that should raise your conviction on a BUY.
+momentum, sector relative strength). These are sparse — usually 0 — but a \
+non-zero score is a real, data-backed edge that should raise your conviction \
+on a BUY.
 4. If a ticker looks interesting, call `get_news` to check for catalysts or risks.
 5. If the evidence supports a trade with a defined edge, call `propose_trade`.
 6. When you have finished analysing the watchlist, stop — do NOT call any more \
@@ -68,11 +69,15 @@ technicals alone — a clean setup with no catalyst is still worth proposing.
 """
 
 
-def build_user_message(watchlist: list[str]) -> str:
+def build_user_message(watchlist: list[str], *, calibration_line: str | None = None) -> str:
     tickers = ", ".join(watchlist) if watchlist else "(empty)"
-    return (
-        f"Today's watchlist: {tickers}\n\n"
+    parts = [
+        f"Today's watchlist: {tickers}",
+        "",
         "Analyse each ticker, check the portfolio, and propose any trades that "
         "meet the risk rules and signal hierarchy above. "
-        "Start by calling get_portfolio."
-    )
+        "Start by calling get_portfolio.",
+    ]
+    if calibration_line:
+        parts.extend(["", calibration_line])
+    return "\n".join(parts)

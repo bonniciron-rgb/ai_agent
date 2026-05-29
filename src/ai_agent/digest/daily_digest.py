@@ -18,7 +18,7 @@ import html
 import logging
 import os
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING
@@ -70,6 +70,9 @@ class DigestData:
     exposure_alloc_pct: int | None = None
     exposure_composite: float | None = None
     exposure_n_symbols: int | None = None
+    # Pre-rendered calibration block from feedback.calibration; empty until
+    # enough closed shadow positions accumulate.
+    calibration_lines: list[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -157,6 +160,17 @@ def aggregate_digest(
 
     cost_alert_triggered = total_cost_usd >= threshold
 
+    # Closed-loop calibration block (from feedback module).
+    calibration_lines: list[str] = []
+    try:
+        from ai_agent.feedback.calibration import compute_calibration, format_calibration_block
+
+        calibration_lines = format_calibration_block(
+            compute_calibration(as_of=digest_date, engine=eng)
+        )
+    except Exception:
+        logger.exception("calibration block failed; digest will omit it")
+
     return DigestData(
         digest_date=digest_date,
         proposal_count=len(proposals),
@@ -173,6 +187,7 @@ def aggregate_digest(
         exposure_alloc_pct=(tilt_row.allocation_pct if tilt_row is not None else None),
         exposure_composite=(tilt_row.composite_score if tilt_row is not None else None),
         exposure_n_symbols=(tilt_row.n_symbols if tilt_row is not None else None),
+        calibration_lines=calibration_lines,
     )
 
 
@@ -220,6 +235,11 @@ def format_digest_html(digest: DigestData) -> str:
         composite = digest.exposure_composite if digest.exposure_composite is not None else 0.0
         n = digest.exposure_n_symbols if digest.exposure_n_symbols is not None else 0
         lines.append(f"• {digest.exposure_alloc_pct}% SPY (composite {composite:+.2f}, {n} names)")
+
+    # Agent calibration section (empty until enough closed shadows accumulate)
+    if digest.calibration_lines:
+        lines.append("")
+        lines.extend(digest.calibration_lines)
 
     # Sample rationale section
     if digest.sample_rationale is not None:

@@ -130,3 +130,63 @@ def test_persist_upserts_on_same_day(_db) -> None:
 
 def test_latest_snapshot_missing_returns_none(_db) -> None:
     assert snapshot_job.latest_snapshot("ZZZZ") is None
+
+
+# ---------------------------------------------------------------------------
+# Sector RS wiring (Batch 56 — completes the 4-of-5 → 5-of-5 signal coverage)
+# ---------------------------------------------------------------------------
+
+
+def test_build_sector_map_assigns_etfs_and_falls_back_to_spy() -> None:
+    """Each watchlist entry's sector string resolves to the right SPDR ETF."""
+    from types import SimpleNamespace
+
+    from ai_agent.signals.snapshot_job import _build_sector_map
+
+    entries = [
+        SimpleNamespace(symbol="AAPL", sector="technology"),
+        SimpleNamespace(symbol="XOM", sector="energy"),
+        SimpleNamespace(symbol="NEE", sector="utilities"),
+        SimpleNamespace(symbol="WEIRD", sector="not_a_real_sector"),  # falls back
+        SimpleNamespace(symbol="MISSING", sector=None),  # falls back
+    ]
+    sector_map = _build_sector_map(SimpleNamespace(entries=entries))
+
+    assert sector_map == {
+        "AAPL": "XLK",
+        "XOM": "XLE",
+        "NEE": "XLU",
+        "WEIRD": "SPY",
+        "MISSING": "SPY",
+    }
+
+
+def test_build_signals_includes_sector_rs_when_sector_map_provided() -> None:
+    """SectorRS is omitted by default but appears when sector_map is supplied."""
+    from ai_agent.signals.snapshot_job import build_signals
+
+    assert {s.name for s in build_signals()} == {
+        "post_earnings_drift",
+        "analyst_revision_momentum",
+        "insider_buying",
+        "short_interest_momentum",
+    }
+
+    sigs = build_signals(sector_map={"AAPL": "XLK"}, sector_prices={})
+    assert "sector_relative_strength" in {s.name for s in sigs}
+
+
+def test_compute_snapshots_includes_sector_rs_in_result(_db, monkeypatch) -> None:
+    """When SectorRS is part of the signal list, every per-symbol result includes it."""
+    from ai_agent.signals.snapshot_job import build_signals, compute_snapshots
+
+    _go_offline(monkeypatch)
+    _seed_bars(_db, "AAPL")
+
+    sigs = build_signals(sector_map={"AAPL": "XLK"}, sector_prices={})
+    results = compute_snapshots(["AAPL"], as_of=AS_OF, signals=sigs)
+
+    assert "sector_relative_strength" in results["AAPL"]
+    # With no sector_prices wired, the signal returns 0 with a clear note —
+    # this is the graceful-degradation path when yfinance is unreachable.
+    assert results["AAPL"]["sector_relative_strength"].score == 0.0
