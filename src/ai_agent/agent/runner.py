@@ -188,10 +188,16 @@ def _run_decision_pass(
     client: AnthropicClientProtocol,
     model: str,
     max_tokens: int,
+    calibration_line: str | None = None,
 ) -> AgentResult:
     """Run the full tool-use agent loop against *shortlist* tickers only."""
     result = AgentResult(model=model)
-    messages: list[dict] = [{"role": "user", "content": build_user_message(shortlist)}]
+    messages: list[dict] = [
+        {
+            "role": "user",
+            "content": build_user_message(shortlist, calibration_line=calibration_line),
+        }
+    ]
     result.prompt_messages = list(messages)
 
     for iteration in range(MAX_ITERATIONS):
@@ -292,6 +298,7 @@ def _run_tiered(
     decision_model: str,
     max_tokens: int,
     shortlist_max: int,
+    calibration_line: str | None = None,
 ) -> AgentResult:
     """Stage 1: Haiku screens the watchlist (held names excluded). Stage 2: Opus decides."""
     from ai_agent.agent.screening import run_screening
@@ -370,6 +377,7 @@ def _run_tiered(
         client=client,
         model=decision_model,
         max_tokens=max_tokens,
+        calibration_line=calibration_line,
     )
 
     # Merge decision counts into aggregate result
@@ -409,6 +417,8 @@ def run_agent(
     screening_model: str = DEFAULT_SCREENING_MODEL,
     decision_model: str = DEFAULT_DECISION_MODEL,
     shortlist_max: int = 5,
+    # Closed-loop calibration line appended to the decision-pass user message.
+    calibration_line: str | None = None,
 ) -> AgentResult:
     """Run the trading agent over *watchlist* and return proposals.
 
@@ -448,6 +458,7 @@ def run_agent(
             decision_model=decision_model,
             max_tokens=max_tokens,
             shortlist_max=shortlist_max,
+            calibration_line=calibration_line,
         )
 
     # Legacy single-pass (LLM_TIERED=false)
@@ -457,6 +468,7 @@ def run_agent(
         client=client,
         model=model,
         max_tokens=max_tokens,
+        calibration_line=calibration_line,
     )
 
 

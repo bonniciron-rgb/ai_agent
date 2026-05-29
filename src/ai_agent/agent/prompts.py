@@ -68,11 +68,15 @@ technicals alone — a clean setup with no catalyst is still worth proposing.
 """
 
 
-def build_user_message(watchlist: list[str]) -> str:
+def build_user_message(watchlist: list[str], *, calibration_line: str | None = None) -> str:
     tickers = ", ".join(watchlist) if watchlist else "(empty)"
-    return (
-        f"Today's watchlist: {tickers}\n\n"
+    parts = [
+        f"Today's watchlist: {tickers}",
+        "",
         "Analyse each ticker, check the portfolio, and propose any trades that "
         "meet the risk rules and signal hierarchy above. "
-        "Start by calling get_portfolio."
-    )
+        "Start by calling get_portfolio.",
+    ]
+    if calibration_line:
+        parts.extend(["", calibration_line])
+    return "\n".join(parts)

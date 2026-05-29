@@ -195,6 +195,43 @@ So the *deliverable, honest* product is currently "**a low-beta equity sleeve**"
 
 ---
 
+### Batch 55: Close the loop — calibration feedback to the agent [2026-05-29]
+**PR (draft)**
+
+The agent has been making calls into a black hole. There was no measurement
+linking proposals to their actual outcomes, so prompt/model/threshold changes
+were all flying blind. The good news the review surfaced: every proposal
+already gets a `ShadowPosition` row that the scheduled `shadow-mtm.yml` job
+closes after 5 trading days with `pnl` set. The outcome data was already
+flowing — it just wasn't being aggregated or fed back.
+
+This PR turns those closed shadows into a **closed loop**:
+
+- **`src/ai_agent/feedback/calibration.py`** — aggregates closed
+  ShadowPositions (joined to Proposal for confidence, and to the brand-new
+  SignalSnapshot for active quant signal at open) into a `Calibration`:
+  overall, by confidence tier, by side, by active signal. Win rate + avg
+  return %. `return_pct = pnl / opened_price` (pnl already side-adjusted).
+- **`format_calibration_line`** — a compact one/two-line summary appended to
+  the decision-pass user message (`agent/prompts.build_user_message`), so
+  Opus now sees a sentence like *"Your recent calibration (last 90d, n=42):
+  overall 48% win, +0.6% avg return. By confidence: high 55%/+0.9% (n=12),
+  medium 41%/+0.1% (n=18). By active signal: insider_buying 60%/+1.1% (n=5)"*
+  threaded via `run_agent → _run_tiered → _run_decision_pass`.
+- **`format_calibration_block`** — multi-line digest section surfaced in
+  the daily Telegram digest via `DigestData.calibration_lines`.
+- **Suppression below 8 samples** — until enough closed shadows accumulate,
+  the prompt line is omitted (noise > signal) and the digest block is empty.
+- By-signal slice will be empty until Batch 54's `SignalSnapshot` history
+  accumulates (a few weeks). The plumbing is in place for it to light up
+  automatically once data flows. This is exactly why we did #2 before #1.
+
+No new tables, no new jobs, no new workflows — pure aggregation + surfacing
+on top of existing data. 8 tests cover overall + by-confidence + by-side +
+window filtering + by-signal join + formatter thresholds.
+
+---
+
 ### Batch 54: Wire dormant quant signals into the agent [2026-05-28]
 **PR (draft)**
 
@@ -1494,4 +1531,4 @@ market leaders and new/emerging companies — including **IPOs**.
 
 **Maintained by**: Claude  
 **Next review**: Daily (or after each PR merge)  
-**Last sync**: 2026-05-28 (Batch 54: wired 4 dormant quant signals — post-earnings drift, analyst revisions, insider buying, short interest — into a new `get_quant_signals` agent tool, fed by a daily SignalSnapshot job; operator must set `FINNHUB_API_KEY` secret for the compute-signals workflow. Batch 53: watchlist 14→30 + Opus 4.8, run `scripts/seed_watchlist.py --apply` once)
+**Last sync**: 2026-05-29 (Batch 55: closed the feedback loop — `feedback/calibration.py` turns closed `ShadowPosition` rows into per-confidence/side/signal win-rate stats, fed into the decision prompt and the daily digest. Batch 54: 4 dormant quant signals wired in via `get_quant_signals` — set `FINNHUB_API_KEY` secret. Batch 53: watchlist 14→30 + Opus 4.8, run `scripts/seed_watchlist.py --apply` once)

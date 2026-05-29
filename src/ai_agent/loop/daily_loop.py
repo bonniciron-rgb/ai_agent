@@ -519,6 +519,19 @@ def run(
         finnhub_source=finnhub_source,
         today=today,
     )
+    # Closed-loop self-calibration: feed the agent a one-line summary of how its
+    # recent calls have actually performed (from closed ShadowPosition rows).
+    # Returns None when sample size is too small to be informative.
+    try:
+        from ai_agent.feedback.calibration import compute_calibration, format_calibration_line
+
+        calibration_line = format_calibration_line(compute_calibration(as_of=today))
+    except Exception:
+        logger.exception("calibration line failed; running without it")
+        calibration_line = None
+    if calibration_line:
+        logger.info("Calibration line: %s", calibration_line)
+
     result = run_agent(
         watchlist.symbols,
         toolbox,
@@ -528,6 +541,7 @@ def run(
         screening_model=settings.llm_screening_model,
         decision_model=settings.llm_decision_model,
         shortlist_max=settings.llm_shortlist_max,
+        calibration_line=calibration_line,
     )
     logger.info(
         "Agent finished: %d proposals, %d iterations",
