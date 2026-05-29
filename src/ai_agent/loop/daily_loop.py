@@ -171,6 +171,25 @@ def _build_toolbox(
             logger.warning("get_external_signals failed for %s: %s", symbol, exc)
             return []
 
+    def get_quant_signals(inputs: dict) -> dict:
+        from ai_agent.signals.snapshot_job import latest_snapshot
+
+        symbol = inputs["symbol"]
+        try:
+            snap = latest_snapshot(symbol)
+            if snap is None:
+                return {"symbol": symbol, "signals": {}, "note": "no signal snapshot available"}
+            return {
+                "symbol": symbol,
+                "as_of": snap.as_of.isoformat(),
+                "composite_score": round(snap.composite_score, 3),
+                "active_count": snap.active_count,
+                "signals": json.loads(snap.signals_json),
+            }
+        except Exception as exc:
+            logger.warning("get_quant_signals failed for %s: %s", symbol, exc)
+            return {"symbol": symbol, "signals": {}, "error": str(exc)}
+
     def get_institutional_holdings(inputs: dict) -> dict:
         from ai_agent.data.thirteenf import MANAGERS, latest_13f
 
@@ -198,6 +217,7 @@ def _build_toolbox(
         propose_trade=propose_trade,
         get_external_signals=get_external_signals,
         get_institutional_holdings=get_institutional_holdings,
+        get_quant_signals=get_quant_signals,
     )
 
 
